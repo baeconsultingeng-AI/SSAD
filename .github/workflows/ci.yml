@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: "Deploy to staging after checks"
+        type: boolean
+        required: false
+        default: false
+      deploy_production:
+        description: "Deploy to production after checks"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install backend dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Import smoke check
+        run: python -c "from app import create_app; print('ok')"
+      - name: Run backend tests
+        run: pytest tests/ -q
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Frontend type-check
+        run: npm run type-check
+      - name: Frontend production build
+        run: npm run build
+
+  docs-presence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify architecture docs exist
+        run: |
+          test -f docs/program/Stage-2-Architecture-Lock.md
+          test -f docs/program/API-Contract-V1.md
+          test -f docs/program/Data-Architecture-Supabase-V1.md
+          test -f docs/program/Multi-Agent-Progress-and-Production-Runbook-2026-03-24.md
+          test -f docs/program/Daily-Agent-Operations-Board-2026-03-24.md
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-checks, docs-presence]
+    if: >
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy_staging == 'true'
+    environment:
+      name: staging
+    env:
+      STAGING_HEALTH_URL: ${{ secrets.STAGING_BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy backend to staging web app
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_WEBAPP_NAME_STAGING }}
+          package: backend
+
+      - name: Deploy frontend to staging web app
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_FRONTEND_WEBAPP_NAME_STAGING }}
+          package: frontend
+
+      - name: Staging health check
+        if: env.STAGING_HEALTH_URL != ''
+        run: |
+          curl --fail --silent --show-error "$STAGING_HEALTH_URL"
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-checks, docs-presence]
+    if: >
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy_production == 'true'
+    environment:
+      name: production
+    env:
+      PRODUCTION_HEALTH_URL: ${{ secrets.PRODUCTION_BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy backend to production web app
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_WEBAPP_NAME_PRODUCTION }}
+          package: backend
+
+      - name: Deploy frontend to production web app
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_FRONTEND_WEBAPP_NAME_PRODUCTION }}
+          package: frontend
+
+      - name: Production health check
+        if: env.PRODUCTION_HEALTH_URL != ''
+        run: |
+          curl --fail --silent --show-error "$PRODUCTION_HEALTH_URL"
+
+  rollback-gate:
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always() && needs.deploy-production.result != 'skipped'
+    steps:
+      - name: Rollback checklist
+        run: |
+          echo "If production verification fails, rollback with previous known-good deployment in Azure."
+          echo "1) Backend: swap to previous deployment slot or prior release artifact."
+          echo "2) Frontend: swap to previous slot/release artifact."
+          echo "3) Database: restore snapshot only after incident review approval."
