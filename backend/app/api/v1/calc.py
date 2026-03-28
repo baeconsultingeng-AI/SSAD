@@ -50,9 +50,12 @@ def create_app() -> Flask:
 
     # CORS — registered first so its before_request handles OPTIONS preflight
     # before our auth middleware ever runs.
+    _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+    _extra_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    _origins = [r"http://localhost:.*", r"http://127\.0\.0\.1:.*"] + _extra_origins
     CORS(
         app,
-        origins=[r"http://localhost:.*", r"http://127\.0\.0\.1:.*"],
+        origins=_origins,
         allow_headers=["Content-Type", "X-API-Key"],
         methods=["GET", "POST", "OPTIONS"],
         max_age=86400,
