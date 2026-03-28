@@ -2,7 +2,7 @@
 
 export type CalcCode = "BS" | "EC" | "ACI";
 export type Verdict = "pass" | "warn" | "fail";
-export type UserTier = "free" | "trial" | "pro";
+export type UserTier = "guest" | "trial" | "pro";
 
 // ─── Request ──────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ export type CalcApiResponse = CalcResponse | CalcError;
 export type ScreenName =
   | "workspace"
   | "ai"
+  | "steel"
   | "result"
   | "report"
   | "detailing"
@@ -105,7 +106,8 @@ export type ScreenName =
 // ─── AI extraction ────────────────────────────────────────
 
 export interface ExtractedParams {
-  elementType: string;
+  module: string;           // full module ID from AI, e.g. "rc_beam_bs_v1"
+  elementType: string;      // kept for backwards compat
   geometry: Record<string, unknown>;
   materials: Record<string, unknown>;
   loads: Record<string, unknown>;

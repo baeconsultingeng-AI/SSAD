@@ -1,0 +1,36 @@
+{
+  "routing": {
+    "strategy": "ordered-failover",
+    "providers": [
+      {
+        "role": "primary",
+        "provider": "anthropic",
+        "model": "<claude-model-id>",
+        "apiKeyEnv": "ANTHROPIC_API_KEY",
+        "timeoutSeconds": 30,
+        "maxRetries": 1
+      },
+      {
+        "role": "fallback_1",
+        "provider": "openai",
+        "model": "<chatgpt-model-id>",
+        "apiKeyEnv": "OPENAI_API_KEY",
+        "timeoutSeconds": 30,
+        "maxRetries": 1
+      },
+      {
+        "role": "fallback_2",
+        "provider": "deepseek",
+        "model": "<deepseek-model-id>",
+        "apiKeyEnv": "DEEPSEEK_API_KEY",
+        "timeoutSeconds": 30,
+        "maxRetries": 1
+      }
+    ],
+    "failoverOn": [
+      "timeout",
+      "rate_limit",
+      "provider_5xx"
+    ]
+  }
+}

@@ -1,5 +1,8 @@
 import os
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before anything else reads os.getenv()
+
 from app.api.v1.calc import create_app  # noqa: E402
 
 app = create_app()

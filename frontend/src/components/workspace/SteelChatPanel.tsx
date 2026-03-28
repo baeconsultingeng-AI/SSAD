@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -8,95 +8,91 @@ import type { CalcRequest } from "@/types/calc";
 import InlineResultCard from "./InlineResultCard";
 import { MODULE_LABELS } from "./InlineResultCard";
 
-// --- Element categories ---
+// â”€â”€â”€ Steel element categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type SubType = { name: string; desc: string; prompt: string };
 
-const RC_ELEMENTS: { id: string; sub: string }[] = [
-  { id: "Slab",        sub: "Solid · Ribbed · Waffle · Flat · Hollow pot" },
-  { id: "Beam",        sub: "Simply supported · Continuous · Cantilever · T-Beam" },
-  { id: "Column",      sub: "Axial · Uniaxial · Biaxial · Short · Slender" },
-  { id: "Foundation",  sub: "Isolated pad · Strip · Combined · Raft · Pile cap" },
-  { id: "Ancillaries", sub: "Retaining wall · Tank · Staircase · Shear wall" },
+const STEEL_ELEMENTS: { id: string; sub: string }[] = [
+  { id: "UB Beam",   sub: "Simply supported Â· Continuous Â· Cantilever Â· Propped" },
+  { id: "UC Column", sub: "Axial Â· Eccentric Â· Biaxial Â· Slender" },
+  { id: "RHS/SHS",  sub: "Tension Â· Compression Â· Bending Â· Combined" },
+  { id: "CHS",       sub: "Tension Â· Compression Â· Bending Â· Combined" },
+  { id: "Truss",     sub: "Pratt Â· Warren Â· Vierendeel Â· Roof" },
 ];
 
-const ELEMENT_SUBTYPES: Record<string, SubType[]> = {
-  Slab: [
-    { name: "Solid Two-Way",  desc: "Two-way spanning, supported on 4 sides",          prompt: "Design a solid two-way RC slab, 4mx5m, 175mm thick, Gk=5kN/m2, Qk=3kN/m2, C35, fy460, BS 8110" },
-    { name: "Solid One-Way",  desc: "One-way spanning, supported on 2 sides",           prompt: "Design a solid one-way RC slab, 4m span, 150mm thick, Gk=4kN/m2, Qk=3kN/m2, C35, fy460, BS 8110" },
-    { name: "Ribbed Slab",    desc: "Ribs with topping slab, reduces weight",           prompt: "Design a ribbed RC slab, 6m span, 300mm deep, 150mm ribs at 600mm c/c, Gk=5kN/m2, Qk=3kN/m2, C35, BS 8110" },
-    { name: "Flat Slab",      desc: "Slab directly on columns, no beams",               prompt: "Design a flat slab, 7x7m panel, 250mm thick, internal column strip, Gk=6kN/m2, Qk=4kN/m2, C35, BS 8110" },
-    { name: "Hollow Pot",     desc: "Hollow blocks reduce slab self-weight",             prompt: "Design a hollow pot slab, 5m span, 250mm deep, Gk=5kN/m2, Qk=3kN/m2, C35, BS 8110" },
+const STEEL_SUBTYPES: Record<string, SubType[]> = {
+  "UB Beam": [
+    { name: "Simply Supported UB",  desc: "Beam on two supports, pinned ends",              prompt: "Design a simply supported steel UB beam, 8m span, dead load 12kN/m, imposed 18kN/m, S355, BS 5950-1:2000" },
+    { name: "Continuous UB",        desc: "Multi-span beam, moment redistribution",          prompt: "Design a continuous steel UB beam, 2 spans of 7.5m, dead load 10kN/m, imposed 15kN/m, S355, BS 5950" },
+    { name: "Cantilever UB",        desc: "Fixed at root end, free at tip",                  prompt: "Design a cantilever steel UB beam, 3m projection, dead load 8kN/m, imposed 12kN/m, S355, BS 5950" },
+    { name: "Propped Cantilever",   desc: "Fixed at root, vertical prop at free end",        prompt: "Design a propped cantilever steel UB, 4m span, dead 8kN/m, imposed 10kN/m, S355, BS 5950" },
   ],
-  Beam: [
-    { name: "Simply Supported", desc: "Spans between two supports, pinned ends",  prompt: "Design a simply supported RC beam, 6m span, 300x500mm, Gk=15kN/m, Qk=10kN/m, C35, fy460, BS 8110" },
-    { name: "Continuous Beam",  desc: "Multiple spans, moment redistribution",    prompt: "Design a continuous RC beam, 3 spans of 5m, 300x500mm, Gk=12kN/m, Qk=8kN/m, C35, fy460, BS 8110" },
-    { name: "Cantilever",       desc: "Fixed at one end, free at the other",      prompt: "Design a cantilever RC beam, 2.5m projection, 300x500mm, Gk=10kN/m, Qk=6kN/m, C35, fy460, BS 8110" },
-    { name: "T-Beam",           desc: "Beam with integral floor slab flange",     prompt: "Design a T-beam, 6m span, web 300x500mm, flange 900x150mm, Gk=15kN/m, Qk=10kN/m, C35, BS 8110" },
+  "UC Column": [
+    { name: "Axially Loaded UC",    desc: "Concentric axial compression only",               prompt: "Design an axially loaded steel UC column, 4.0m storey height, factored axial load 1200kN, S355, BS 5950" },
+    { name: "Eccentric Loading",    desc: "Axial load plus major axis bending",              prompt: "Design a steel UC column with eccentric loading, 4m effective height, N=800kN, Mx=55kNm, S355, BS 5950" },
+    { name: "Biaxial Bending",      desc: "Axial plus bending about both principal axes",    prompt: "Design a steel UC column, 4m effective height, N=600kN, Mx=45kNm, My=25kNm, S355, BS 5950" },
+    { name: "Slender Column",       desc: "High effective length, buckling-critical",        prompt: "Design a slender steel UC column, 6m effective height, factored axial load 500kN, S355, BS 5950" },
   ],
-  Column: [
-    { name: "Axially Loaded",   desc: "Concentric load only, no bending",   prompt: "Design an axially loaded RC column, 300x300mm, 3.5m height, N=1500kN, C35, fy460, BS 8110" },
-    { name: "Uniaxial Bending", desc: "Axial load + bending about one axis", prompt: "Design an RC column, 300x400mm, 3.5m, N=1200kN, Mx=80kNm, C35, fy460, BS 8110" },
-    { name: "Biaxial Bending",  desc: "Axial load + bending about both axes", prompt: "Design a biaxially loaded RC column, 350x350mm, 4m, N=900kN, Mx=60kNm, My=45kNm, C35, BS 8110" },
-    { name: "Slender Column",   desc: "High slenderness, additional moments",  prompt: "Design a slender RC column, 250x250mm, 6m effective height, N=600kN, C35, fy460, BS 8110" },
+  "RHS/SHS": [
+    { name: "RHS Tension Member",   desc: "Rectangular hollow section in pure tension",      prompt: "Design a steel RHS tension member, factored tensile force 500kN, effective length 3.5m, S355, BS 5950" },
+    { name: "RHS Compression",      desc: "RHS strut under axial compression",               prompt: "Design a steel RHS compression member, factored axial load 420kN, effective length 3.0m, S355, BS 5950" },
+    { name: "RHS Bending",          desc: "RHS beam under transverse loading",               prompt: "Design a steel RHS beam, 4m simply supported span, factored UDL 10kN/m, S355, BS 5950" },
+    { name: "RHS Combined",         desc: "RHS under combined axial and bending",            prompt: "Design a steel RHS under combined loading, factored axial 250kN plus moment 20kNm, effective length 2.5m, S355, BS 5950" },
   ],
-  Foundation: [
-    { name: "Isolated Pad",     desc: "Single column footing on firm soil",               prompt: "Design an isolated pad foundation, soil 150kN/m2, column N=1200kN, depth 1.5m, C35, BS 8004" },
-    { name: "Strip Foundation", desc: "Continuous footing under wall or row of columns",  prompt: "Design a strip foundation, wall load 120kN/m, soil 100kN/m2, depth 1.0m, C35, BS 8004" },
-    { name: "Combined Footing", desc: "Single footing shared by two columns",             prompt: "Design a combined footing, two columns 1200kN each at 3m centres, soil 150kN/m2, C35, BS 8004" },
-    { name: "Raft Foundation",  desc: "Full building footprint, poor soil",               prompt: "Design a raft foundation, 12x8m, UDL 60kN/m2, soil 80kN/m2, C35, BS 8004" },
-    { name: "Pile Cap",         desc: "Cap connecting group of piles",                    prompt: "Design a pile cap for 4 piles, column N=2400kN, pile diameter 450mm, C35, BS 8004" },
+  "CHS": [
+    { name: "CHS Tension",          desc: "Circular hollow section in pure tension",         prompt: "Design a steel CHS tension member, factored tensile force 380kN, effective length 3m, S355, BS 5950" },
+    { name: "CHS Compression",      desc: "CHS strut under axial compression",               prompt: "Design a steel CHS compression strut, factored axial load 320kN, effective length 2.5m, S355, BS 5950" },
+    { name: "CHS Bending",          desc: "CHS beam under transverse bending",               prompt: "Design a steel CHS beam, 3m simply supported span, factored point load 40kN at midspan, S355, BS 5950" },
+    { name: "CHS Combined",         desc: "CHS under combined axial force and moment",       prompt: "Design a steel CHS section, combined axial 180kN and moment 12kNm, effective length 2m, S355, BS 5950" },
   ],
-  Ancillaries: [
-    { name: "Retaining Wall",  desc: "Cantilever wall retaining soil or fill", prompt: "Design a cantilever retaining wall, retained height 3m, soil unit weight 18kN/m3, phi=30 deg, BS 8110" },
-    { name: "Shear Wall",      desc: "RC wall resisting lateral loads",        prompt: "Design an RC shear wall, 200mm thick, 3m wide, 3m high, lateral load 150kN, C35, BS 8110" },
-    { name: "Staircase",       desc: "RC stair flight with landings",          prompt: "Design an RC staircase, 3.3m floor height, 175mm risers, 250mm treads, Qk=4kN/m2, C35, BS 8110" },
-    { name: "Water Tank",      desc: "Rectangular below or above ground tank", prompt: "Design a rectangular RC water tank 4x3x2m, C35, fy460, BS 8007" },
+  "Truss": [
+    { name: "Pratt Truss",          desc: "Verticals in compression, diagonals in tension",  prompt: "Design a Pratt steel roof truss, 10m span, 2m depth, roof dead 0.5kN/m2, snow 0.6kN/m2, S355, BS 5950" },
+    { name: "Warren Truss",         desc: "Diagonal members alternate tension / compression", prompt: "Design a Warren steel truss, 12m span, 1.8m depth, factored UDL 8kN/m on top chord, S355, BS 5950" },
+    { name: "North-Light Truss",    desc: "Asymmetric pitched roof, sawtooth profile",       prompt: "Design a steel north-light roof truss, 9m span, pitch 15 degrees, dead 0.4kN/m2, imposed 0.6kN/m2, S355, BS 5950" },
+    { name: "Vierendeel Frame",     desc: "Rectangular panels, no diagonals, moment-rigid",  prompt: "Design a Vierendeel steel truss, 8m span, 4 rectangular panels, factored applied load 120kN, S355, BS 5950" },
   ],
 };
 
-const ELEMENT_PROMPTS: Record<string, { name: string; text: string }[]> = {
-  Slab: [
-    { name: "Two-Way Slab",    text: "Design a solid two-way RC slab, 4mx5m, 175mm thick, Gk=5kN/m2, Qk=3kN/m2, C35, fy460, BS 8110" },
-    { name: "One-Way Slab",    text: "Design a solid one-way RC slab, 4m span, 150mm thick, Gk=4kN/m2, Qk=3kN/m2, C35, fy460, BS 8110" },
-    { name: "Ribbed Slab",     text: "Design a ribbed RC slab, 6m span, 300mm deep, 150mm ribs at 600mm c/c, Gk=5kN/m2, C35" },
-    { name: "Flat Slab",       text: "Design a flat slab, 7x7m panel, 250mm thick, Gk=6kN/m2, Qk=4kN/m2, C35, BS 8110" },
+const STEEL_PROMPTS: Record<string, { name: string; text: string }[]> = {
+  "UB Beam": [
+    { name: "SS UB 8m S355",        text: "Simply supported steel UB beam, 8m span, dead 12kN/m, imposed 18kN/m, S355, BS 5950" },
+    { name: "Continuous 2Ã—7.5m",    text: "Continuous steel UB, 2 spans of 7.5m, dead 10kN/m, imposed 15kN/m, S355, BS 5950" },
+    { name: "Cantilever 3m",        text: "Cantilever steel UB, 3m projection, dead 8kN/m, imposed 12kN/m, S355, BS 5950" },
+    { name: "Propped Cantilever",   text: "Propped cantilever steel UB, 4m span, dead 8kN/m, imposed 10kN/m, S355, BS 5950" },
   ],
-  Beam: [
-    { name: "Simply Supported", text: "Design a simply supported RC beam, 6m span, 300x500mm, Gk=15kN/m, C35, BS 8110" },
-    { name: "Continuous Beam",  text: "Design a continuous RC beam, 3 spans of 5m, 300x500mm, Gk=12kN/m, C35, BS 8110" },
-    { name: "Cantilever Beam",  text: "Design a cantilever RC beam, 2.5m projection, 300x500mm, Gk=10kN/m, C35, fy460, BS 8110" },
-    { name: "T-Beam",           text: "Design a T-beam, 6m span, web 300x500mm, flange 900x150mm, Gk=15kN/m, C35, BS 8110" },
+  "UC Column": [
+    { name: "Axial 1200kN",         text: "Axially loaded steel UC column, 4m storey height, N=1200kN, S355, BS 5950" },
+    { name: "Eccentric N+Mx",       text: "Steel UC, 4m height, N=800kN, Mx=55kNm, S355, BS 5950" },
+    { name: "Biaxial N+Mx+My",      text: "Steel UC, 4m height, N=600kN, Mx=45kNm, My=25kNm, S355, BS 5950" },
+    { name: "Slender 6m",           text: "Slender steel UC, 6m effective height, N=500kN, S355, BS 5950" },
   ],
-  Column: [
-    { name: "Axially Loaded",   text: "Design an axially loaded RC column, 300x300mm, 3.5m height, N=1500kN, C35, BS 8110" },
-    { name: "Uniaxial Bending", text: "Design an RC column, 300x400mm, 3.5m, N=1200kN, Mx=80kNm, C35, fy460, BS 8110" },
-    { name: "Biaxial Bending",  text: "Biaxial RC column, 350x350mm, N=900kN, Mx=60kNm, My=45kNm, C35, BS 8110" },
-    { name: "Slender Column",   text: "Slender RC column, 250x250mm, 6m effective height, N=600kN, C35, BS 8110" },
+  "RHS/SHS": [
+    { name: "RHS Tension 500kN",    text: "Steel RHS tension member, 500kN, effective length 3.5m, S355, BS 5950" },
+    { name: "RHS Strut 420kN",      text: "Steel RHS compression member, 420kN, effective length 3m, S355, BS 5950" },
+    { name: "RHS Beam 4m",          text: "Steel RHS beam, 4m span, factored UDL 10kN/m, S355, BS 5950" },
+    { name: "RHS Combined",         text: "Steel RHS combined axial 250kN + moment 20kNm, effective length 2.5m, S355" },
   ],
-  Foundation: [
-    { name: "Isolated Pad",     text: "Isolated pad foundation, soil 150kN/m2, column N=1200kN, depth 1.5m, C35" },
-    { name: "Strip Foundation", text: "Strip foundation, wall load 120kN/m, soil 100kN/m2, depth 1.0m, C35, BS 8004" },
-    { name: "Raft Foundation",  text: "Raft foundation, 12x8m, UDL 60kN/m2, soil 80kN/m2, C35, BS 8004" },
-    { name: "Pile Cap",         text: "Pile cap for 4 piles, column N=2400kN, pile diam 450mm, C35" },
+  "CHS": [
+    { name: "CHS Tension 380kN",    text: "Steel CHS tension member, 380kN, effective length 3m, S355, BS 5950" },
+    { name: "CHS Strut 320kN",      text: "Steel CHS compression strut, 320kN, effective length 2.5m, S355, BS 5950" },
+    { name: "CHS Bending 40kN",     text: "Steel CHS beam, 3m span, point load 40kN at midspan, S355, BS 5950" },
+    { name: "CHS Combined",         text: "Steel CHS combined axial 180kN + moment 12kNm, effective length 2m, S355" },
   ],
-  Ancillaries: [
-    { name: "Retaining Wall",  text: "Cantilever retaining wall, retained height 3m, soil unit wt 18kN/m3, phi=30 deg" },
-    { name: "Shear Wall",      text: "RC shear wall, 200mm thick, 3m wide, 3m high, lateral load 150kN, C35" },
-    { name: "Staircase",       text: "RC staircase, 3.3m floor height, 175mm risers, 250mm treads, Qk=4kN/m2, C35" },
-    { name: "Water Tank",      text: "RC water tank, 4x3x2m, C35, fy460, BS 8007" },
+  "Truss": [
+    { name: "Pratt 10m",            text: "Pratt steel roof truss, 10m span, 2m depth, dead 0.5kN/m2, snow 0.6kN/m2, S355, BS 5950" },
+    { name: "Warren 12m",           text: "Warren steel truss, 12m span, 1.8m depth, factored UDL 8kN/m, S355, BS 5950" },
+    { name: "North-Light 9m",       text: "North-light steel roof truss, 9m span, pitch 15 deg, dead 0.4kN/m2, imposed 0.6kN/m2" },
+    { name: "Vierendeel 8m",        text: "Vierendeel steel frame, 8m span, 4 panels, factored 120kN, S355, BS 5950" },
   ],
 };
 
-const DEFAULT_PROMPTS = [
-  { name: "RC Slab",    text: "Design a solid two-way RC slab, 4mx5m, 175mm thick, Gk=5kN/m2, Qk=3kN/m2, C35, fy460, BS 8110" },
-  { name: "RC Beam",    text: "Design a simply supported RC beam, 6m span, 300x500mm, Gk=15kN/m, Qk=10kN/m, C35, fy460, BS 8110" },
-  { name: "RC Column",  text: "Design an axially loaded RC column, 300x300mm, 3.5m height, N=1500kN, C35, fy460, BS 8110" },
-  { name: "Foundation", text: "Design an isolated pad foundation, soil 150kN/m2, column N=1200kN, depth 1.5m, C35, BS 8004" },
+const DEFAULT_STEEL_PROMPTS = [
+  { name: "SS UB Beam",   text: "Design a simply supported steel UB beam, 8m span, dead 12kN/m, imposed 18kN/m, S355, BS 5950" },
+  { name: "UC Column",    text: "Design an axially loaded steel UC column, 4m storey height, factored load 1200kN, S355, BS 5950" },
+  { name: "RHS Member",   text: "Design a steel RHS compression member, factored axial 420kN, effective length 3m, S355, BS 5950" },
+  { name: "Pratt Truss",  text: "Design a Pratt steel roof truss, 10m span, 2m depth, dead 0.5kN/m2, snow 0.6kN/m2, S355, BS 5950" },
 ];
 
-
-// Phase step IDs
 type Phase = 1 | 2 | 3 | 4;
 
 // ─── Element ID generator ─────────────────────────────────────────────────────
@@ -121,7 +117,7 @@ function generateElemId(module: string): string {
   return `${prefix}${next.toString().padStart(2, "0")}`;
 }
 
-export default function AIChatPanel() {
+export default function SteelChatPanel() {
   const {
     messages,
     addMessage,
@@ -151,6 +147,9 @@ export default function AIChatPanel() {
   const [isListening, setIsListening] = useState(false);
   const [redesignMode, setRedesignMode] = useState(false);
 
+  // Suppress eslint warning â€” effectiveTier used in future tier-locking
+  void effectiveTier;
+
   // Chat history is preserved in WorkspaceContext — only cleared explicitly
   // (via Redesign / Edit buttons) so returning from the report screen keeps
   // the full previous conversation intact.
@@ -159,7 +158,6 @@ export default function AIChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isProcessing]);
 
-  // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     e.target.style.height = "auto";
@@ -229,7 +227,6 @@ export default function AIChatPanel() {
     setIsProcessing(true);
     setPhase(2);
 
-    // Call AI extraction endpoint
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
       const authKey = process.env.NEXT_PUBLIC_API_AUTH_KEY ?? "";
@@ -258,10 +255,9 @@ export default function AIChatPanel() {
         });
         setPhase(3);
       } else {
-        // AI endpoint not yet live — show helpful message
         addMessage({
           role: "assistant",
-          content: "I've received your description. The AI extraction endpoint is being configured — calculations will be available shortly. You can describe your structural element and I'll extract the parameters automatically.",
+          content: "I've received your description. The AI extraction endpoint is being configured â€” calculations will be available shortly.",
         });
         setPhase(1);
       }
@@ -284,7 +280,7 @@ export default function AIChatPanel() {
     const request: CalcRequest = {
       requestId: `req_${Date.now()}`,
       module: envelope.module,
-      code: (envelope.designCode ?? "BS") as CalcRequest["code"],
+      code: "BS",
       version: "1.0",
       project: { projectId: projectId ?? undefined, elementId: elementId ?? undefined },
       inputs: {
@@ -302,20 +298,12 @@ export default function AIChatPanel() {
         addMessage({ role: "assistant", content: "__RESULT__" });
         setPhase(1);
       } else {
-        const details = (response.error as { details?: { field: string; issue: string }[] }).details;
-        const detailText = details?.map(d => `${d.field}: ${d.issue}`).join("; ") ?? "";
-        addMessage({
-          role: "assistant",
-          content: `Calculation error: ${response.error.message}${detailText ? `\n\nDetails: ${detailText}` : ""}`,
-        });
+        addMessage({ role: "assistant", content: `Calculation error: ${response.error.message}` });
         setPhase(3);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Network error — could not reach calculation service.";
-      addMessage({
-        role: "assistant",
-        content: `Calculation failed: ${msg}`,
-      });
+      const msg = err instanceof Error ? err.message : "Network error â€” could not reach calculation service.";
+      addMessage({ role: "assistant", content: `Calculation failed: ${msg}` });
       setPhase(3);
     } finally {
       setIsProcessing(false);
@@ -331,109 +319,60 @@ export default function AIChatPanel() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f5f1eb" }}>
 
-      {/* ── TOP BAR ── */}
+      {/* â”€â”€ TOP BAR â”€â”€ */}
       <div style={{ flexShrink: 0, position: "relative", zIndex: 2, background: "#f5f1eb", borderBottom: "1px solid #ddd8cf", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* Animated online status ring */}
           <div style={{ position: "relative", width: 36, height: 36, flexShrink: 0 }}>
-            {/* Rotating dashed orbit */}
-            <div style={{
-              position: "absolute", inset: -4,
-              borderRadius: "50%",
-              border: "1.5px dashed rgba(34,197,94,0.45)",
-              animation: "orbit 4s linear infinite",
-            }} />
-            {/* Breathing glow ring */}
-            <div style={{
-              position: "absolute", inset: 0,
-              borderRadius: "50%",
-              border: "2px solid #4ade80",
-              animation: "breathe 2.4s ease-in-out infinite",
-            }} />
-            {/* Avatar */}
-            <div style={{
-              width: 36, height: 36,
-              borderRadius: "50%",
-              background: "#1a4a8a",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxSizing: "border-box",
-            }}>
+            <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "1.5px dashed rgba(34,197,94,0.45)", animation: "orbit 4s linear infinite" }} />
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid #4ade80", animation: "breathe 2.4s ease-in-out infinite" }} />
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1a3a5c", display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box" }}>
               <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
-                <rect x="13" y="12" width="22" height="17" rx="4" fill="rgba(255,255,255,0.18)" stroke="white" strokeWidth="1.3"/>
-                <rect x="16" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                <rect x="26" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                <rect x="16" y="24" width="16" height="3" rx="1" fill="rgba(200,150,12,0.4)" stroke="rgba(200,150,12,0.7)" strokeWidth="1"/>
-                <rect x="11" y="32" width="26" height="10" rx="3" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                <rect x="9" y="11" width="30" height="7" rx="2" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.75)" strokeWidth="1.2"/>
+                <rect x="21" y="18" width="6" height="12" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                <rect x="9" y="30" width="30" height="7" rx="2" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                <rect x="12" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                <rect x="30" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                <line x1="16" y1="34" x2="32" y2="34" stroke="rgba(200,150,12,0.65)" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
             </div>
-            {/* Online dot */}
-            <div style={{
-              position: "absolute", bottom: 1, right: 1,
-              width: 8, height: 8, borderRadius: "50%",
-              background: "#22c55e",
-              border: "2px solid #f5f1eb",
-              boxShadow: "0 0 6px 1px rgba(34,197,94,0.6)",
-              animation: "pulse 2s ease-in-out infinite",
-            }} />
+            <div style={{ position: "absolute", bottom: 1, right: 1, width: 8, height: 8, borderRadius: "50%", background: "#22c55e", border: "2px solid #f5f1eb", boxShadow: "0 0 6px 1px rgba(34,197,94,0.6)", animation: "pulse 2s ease-in-out infinite" }} />
           </div>
           <div>
-            <div style={{ fontFamily: "var(--ser)", fontSize: 14, fontWeight: 700, color: "var(--txt)", lineHeight: 1.2 }}>RC Design Assistant</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#16a34a", fontWeight: 600, marginTop: 2, letterSpacing: "0.4px" }}>● Online</div>
+            <div style={{ fontFamily: "var(--ser)", fontSize: 14, fontWeight: 700, color: "var(--txt)", lineHeight: 1.2 }}>Steel Design Assistant</div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#16a34a", fontWeight: 600, marginTop: 2, letterSpacing: "0.4px" }}>â— Online</div>
           </div>
         </div>
         <button onClick={() => goScreen("workspace")} style={{ background: "rgba(200,150,12,.1)", border: "1px solid rgba(200,150,12,.35)", color: "var(--blu)", padding: "5px 10px", borderRadius: 8, fontFamily: "var(--mono)", fontSize: 9, cursor: "pointer", fontWeight: 700 }}>
-          ← Back
+          â† Back
         </button>
       </div>
 
-      {/* ── WARM IVORY CONTENT ZONE ── */}
+      {/* â”€â”€ WARM IVORY CONTENT â”€â”€ */}
       <div style={{ flex: 1, display: "flex", background: "#f5f1eb", overflow: "hidden", minHeight: 0 }}>
 
-        {/* LEFT: Phase bar + Chat + Input */}
+        {/* LEFT: Phase bar + Nav + Chat + Input */}
         <div className="ai-chat-col">
 
           {/* Phase progress bar */}
           <div className="ai-phase">
             <div style={{ display: "flex", alignItems: "center", gap: 0, width: "100%" }}>
-              <div className={stepClass(1)}>
-                <span className="step-num">1</span>
-                <span className="step-lbl">Describe</span>
-              </div>
-              <div className="step-arr">›</div>
-              <div className={stepClass(2)}>
-                <span className="step-num">2</span>
-                <span className="step-lbl">Extract</span>
-              </div>
-              <div className="step-arr">›</div>
-              <div className={stepClass(3)}>
-                <span className="step-num">3</span>
-                <span className="step-lbl">Confirm</span>
-              </div>
-              <div className="step-arr">›</div>
-              <div className={stepClass(4)}>
-                <span className="step-num">4</span>
-                <span className="step-lbl">Design</span>
-              </div>
+              <div className={stepClass(1)}><span className="step-num">1</span><span className="step-lbl">Describe</span></div>
+              <div className="step-arr">â€º</div>
+              <div className={stepClass(2)}><span className="step-num">2</span><span className="step-lbl">Extract</span></div>
+              <div className="step-arr">â€º</div>
+              <div className={stepClass(3)}><span className="step-num">3</span><span className="step-lbl">Confirm</span></div>
+              <div className="step-arr">â€º</div>
+              <div className={stepClass(4)}><span className="step-num">4</span><span className="step-lbl">Design</span></div>
             </div>
           </div>
 
-          {/* ── Installation-style progress bar ── */}
-          <div style={{ flexShrink: 0, height: 4, background: "#e8e2d9", position: "relative", overflow: "hidden" }}>
-            <div style={{
-              position: "absolute", left: 0, top: 0, bottom: 0,
-              width: `${(phase / 4) * 100}%`,
-              background: "linear-gradient(90deg,#1a4a8a 0%,#2563b0 60%,#4ade80 100%)",
-              transition: "width 0.5s cubic-bezier(.4,0,.2,1)",
-              borderRadius: "0 2px 2px 0",
-            }} />
-          </div>
-
-          {/* ── Persistent Element Navigation ── */}
+          {/* â”€â”€ Persistent Element Navigation â”€â”€ */}
           <div style={{ flexShrink: 0, background: "#e8e2d9", borderBottom: "1px solid #ddd8cf" }}>
-            {/* Element pills row */}
+            {/* Element pills */}
             <div style={{ display: "flex", gap: 5, padding: "8px 14px 5px", overflowX: "auto", alignItems: "center" }}>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 8, color: "rgba(26,74,138,.55)", letterSpacing: ".6px", flexShrink: 0, marginRight: 4, fontWeight: 700, textTransform: "uppercase" }}>Element:</span>
-              {RC_ELEMENTS.map(el => (
+              <span style={{ fontFamily: "var(--mono)", fontSize: 8, color: "rgba(26,74,138,.55)", letterSpacing: ".6px", flexShrink: 0, marginRight: 4, fontWeight: 700, textTransform: "uppercase" }}>Section:</span>
+              {STEEL_ELEMENTS.map(el => (
                 <button
                   key={el.id}
                   onClick={() => { setSelectedElement(el.id); setPickerState("subtypes"); }}
@@ -458,19 +397,14 @@ export default function AIChatPanel() {
                 <button
                   onClick={() => { setSelectedElement(null); setPickerState("elements"); }}
                   style={{ fontFamily: "var(--mono)", fontSize: 8, padding: "3px 8px", marginLeft: 4, borderRadius: 20, cursor: "pointer", border: "1px solid rgba(200,150,12,.25)", background: "none", color: "rgba(200,150,12,.6)", flexShrink: 0 }}
-                >× clear</button>
+                >Ã— clear</button>
               )}
             </div>
 
-          </div>
-
-          {/* ── Chat messages (only scrollable area) ── */}
-          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-
-            {/* Subtype cards — scroll with chat */}
+            {/* Subtypes for selected element */}
             {selectedElement && (
-              <div style={{ padding: "10px 14px 6px", display: "flex", flexDirection: "column", gap: 5, background: "#e8e2d9", borderBottom: "1px solid #ddd8cf" }}>
-                {(ELEMENT_SUBTYPES[selectedElement] ?? []).map(sub => (
+              <div style={{ padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 5, maxHeight: 230, overflowY: "auto" }}>
+                {(STEEL_SUBTYPES[selectedElement] ?? []).map(sub => (
                   <div
                     key={sub.name}
                     className="elem-card"
@@ -486,15 +420,17 @@ export default function AIChatPanel() {
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--blu)" strokeWidth="1.8"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
                   </div>
                 ))}
-                <div style={{ padding: "4px 2px 2px", fontFamily: "var(--mono)", fontSize: 9, color: "var(--mut)" }}>
-                  Or describe in your own words below ↓
+                <div style={{ padding: "4px 2px 0", fontFamily: "var(--mono)", fontSize: 9, color: "var(--mut)" }}>
+                  Or describe in your own words below â†“
                 </div>
               </div>
             )}
+          </div>
 
+          {/* Chat messages */}
           <div
             id="ai-chat"
-            style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 11, background: "#f5f1eb" }}
+            style={{ flex: 1, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 11, background: "#f5f1eb", overflowY: "auto", minHeight: 0 }}
           >
             {messages.length === 0 && !selectedElement && (
               <div>
@@ -502,26 +438,27 @@ export default function AIChatPanel() {
                 <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "flex-start" }}>
                   <div className="ai-av ag" style={{ flexShrink: 0, marginTop: 2 }}>
                     <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
-                      <circle cx="24" cy="24" r="23" fill="#1a4a8a"/>
+                      <circle cx="24" cy="24" r="23" fill="#1a3a5c"/>
                       <circle cx="24" cy="24" r="23" stroke="#c8960c" strokeWidth="1.5"/>
-                      <rect x="13" y="12" width="22" height="17" rx="4" fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth="1.2"/>
-                      <rect x="16" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                      <rect x="26" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                      <rect x="16" y="24" width="16" height="3" rx="1" fill="rgba(200,150,12,0.4)" stroke="rgba(200,150,12,0.7)" strokeWidth="1"/>
-                      <rect x="11" y="32" width="26" height="10" rx="3" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" strokeWidth="1"/>
+                      <rect x="9" y="11" width="30" height="7" rx="2" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.75)" strokeWidth="1.2"/>
+                      <rect x="21" y="18" width="6" height="12" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                      <rect x="9" y="30" width="30" height="7" rx="2" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                      <rect x="12" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                      <rect x="30" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                      <line x1="16" y1="34" x2="32" y2="34" stroke="rgba(200,150,12,0.65)" strokeWidth="1.3" strokeLinecap="round"/>
                     </svg>
                   </div>
                   <div className="bbl ag" style={{ fontSize: 13, lineHeight: 1.65 }}>
-                    <div style={{ fontFamily: "var(--ser)", fontWeight: 700, fontSize: 13, marginBottom: 5, color: "var(--txt)" }}>Hello! I am your RC Design Assistant.</div>
+                    <div style={{ fontFamily: "var(--ser)", fontWeight: 700, fontSize: 13, marginBottom: 5, color: "var(--txt)" }}>Hello! I am your Steel Design Assistant.</div>
                     <div style={{ fontFamily: "var(--ui)", color: "var(--mut)" }}>
-                      I specialise in reinforced concrete design to <strong>BS 8110</strong> and <strong>EC2</strong>. I can help you size and check slabs, beams, columns, foundations, and ancillary elements — step by step.
+                      I specialise in structural steel design to <strong>BS 5950-1</strong> for grades <strong>S275</strong> and <strong>S355</strong>. I can help you size and check UB/UC sections, hollow sections, and trusses â€” with full design output.
                     </div>
                     <div style={{ fontFamily: "var(--ui)", color: "var(--mut)", marginTop: 8 }}>
-                      To get started, <strong>select the element type</strong> you want to design from the options below:
+                      To get started, <strong>select the section type</strong> you want to design from the options below:
                     </div>
                   </div>
                 </div>
-                {RC_ELEMENTS.map(el => (
+                {STEEL_ELEMENTS.map(el => (
                   <div
                     key={el.id}
                     className="elem-card"
@@ -533,11 +470,11 @@ export default function AIChatPanel() {
                   >
                     <div className="elem-card-icon">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blu)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        {el.id === "Slab"        && <rect x="2" y="9" width="20" height="6" rx="1"/>}
-                        {el.id === "Beam"        && <><rect x="2" y="8" width="20" height="8" rx="1"/><line x1="6" y1="4" x2="6" y2="8"/><line x1="18" y1="4" x2="18" y2="8"/><line x1="6" y1="4" x2="18" y2="4"/></>}
-                        {el.id === "Column"      && <><rect x="8" y="2" width="8" height="20" rx="1"/><line x1="5" y1="2" x2="19" y2="2"/><line x1="5" y1="22" x2="19" y2="22"/></>}
-                        {el.id === "Foundation"  && <><line x1="10" y1="3" x2="10" y2="12"/><rect x="4" y="12" width="16" height="6" rx="1"/><line x1="1" y1="20" x2="23" y2="20"/><line x1="3" y1="22" x2="6" y2="20"/><line x1="8" y1="22" x2="11" y2="20"/><line x1="13" y1="22" x2="16" y2="20"/><line x1="18" y1="22" x2="21" y2="20"/></>}
-                        {el.id === "Ancillaries" && <><line x1="8" y1="3" x2="8" y2="21"/><rect x="5" y="18" width="14" height="3" rx="1"/><line x1="8" y1="7" x2="18" y2="7"/><line x1="8" y1="11" x2="18" y2="11"/><line x1="8" y1="15" x2="18" y2="15"/></>}
+                        {el.id === "UB Beam"   && <><rect x="2" y="10" width="20" height="3" rx=".5"/><rect x="5" y="6" width="14" height="2" rx=".5"/><rect x="5" y="16" width="14" height="2" rx=".5"/></>}
+                        {el.id === "UC Column" && <><rect x="9" y="2" width="6" height="20" rx=".5"/><rect x="5" y="2" width="14" height="3" rx=".5"/><rect x="5" y="19" width="14" height="3" rx=".5"/></>}
+                        {el.id === "RHS/SHS"   && <rect x="3" y="5" width="18" height="14" rx="1.5" strokeWidth="2"/>}
+                        {el.id === "CHS"       && <circle cx="12" cy="12" r="9" strokeWidth="2"/>}
+                        {el.id === "Truss"     && <><line x1="2" y1="18" x2="22" y2="18"/><line x1="2" y1="18" x2="12" y2="6"/><line x1="22" y1="18" x2="12" y2="6"/><line x1="7" y1="18" x2="12" y2="6"/><line x1="17" y1="18" x2="12" y2="6"/></>}
                       </svg>
                     </div>
                     <div style={{ flex: 1 }}>
@@ -555,13 +492,14 @@ export default function AIChatPanel() {
                   {selectedElement} selected
                 </div>
                 <div style={{ fontFamily: "var(--ui)", fontSize: 12, color: "var(--mut)", lineHeight: 1.6 }}>
-                  Pick a sub-type from the list above — or describe your element in your own words below.
+                  Pick a member type from the list above â€” or describe your steel element in your own words below.
                 </div>
               </div>
             )}
+
             {messages.map((m) => {
               if (m.role === "assistant" && m.content.startsWith("__EXTRACTED__")) {
-                return <ExtractedCard key={m.id} content={m.content} elementId={designElementId} autoEdit={redesignMode} onConfirm={(env) => { setRedesignMode(false); void handleConfirm(env); }} onEdit={() => { clearChat(); setPhase(1); setPickerState("elements"); setSelectedElement(null); }} />;
+                return <SteelExtractedCard key={m.id} content={m.content} elementId={designElementId} autoEdit={redesignMode} onConfirm={(env) => { setRedesignMode(false); void handleConfirm(env); }} onEdit={() => { clearChat(); setPhase(1); setPickerState("elements"); setSelectedElement(null); }} />;
               }
               if (m.role === "assistant" && m.content === "__RESULT__" && calcResult) {
                 return <InlineResultCard key={m.id} calcResult={calcResult} elementId={designElementId} onViewReport={() => goScreen("report")} onViewDetails={() => goScreen("detailing")} onRedesign={() => { popMessage(); setCalcResult(null); setPhase(3); setRedesignMode(true); }} />;
@@ -569,15 +507,16 @@ export default function AIChatPanel() {
               return (
                 <div key={m.id} className={`ai-msg ${m.role === "user" ? "usr" : ""}`}>
                   <div className={`ai-av ${m.role === "user" ? "us" : "ag"}`}>
-                    {m.role === "user" ? "👤" : (
+                    {m.role === "user" ? "ðŸ‘¤" : (
                       <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
-                        <circle cx="24" cy="24" r="23" fill="#1a4a8a"/>
+                        <circle cx="24" cy="24" r="23" fill="#1a3a5c"/>
                         <circle cx="24" cy="24" r="23" stroke="#c8960c" strokeWidth="1.5"/>
-                        <rect x="13" y="12" width="22" height="17" rx="4" fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth="1.2"/>
-                        <rect x="16" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                        <rect x="26" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                        <rect x="16" y="24" width="16" height="3" rx="1" fill="rgba(200,150,12,0.4)" stroke="rgba(200,150,12,0.7)" strokeWidth="1"/>
-                        <rect x="11" y="32" width="26" height="10" rx="3" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" strokeWidth="1"/>
+                        <rect x="9" y="11" width="30" height="7" rx="2" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.75)" strokeWidth="1.2"/>
+                        <rect x="21" y="18" width="6" height="12" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                        <rect x="9" y="30" width="30" height="7" rx="2" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                        <rect x="12" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                        <rect x="30" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                        <line x1="16" y1="34" x2="32" y2="34" stroke="rgba(200,150,12,0.65)" strokeWidth="1.3" strokeLinecap="round"/>
                       </svg>
                     )}
                   </div>
@@ -588,18 +527,18 @@ export default function AIChatPanel() {
               );
             })}
 
-            {/* Typing indicator */}
             {isProcessing && (
               <div className="typ-row">
                 <div className="ai-av ag">
                   <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
-                    <circle cx="24" cy="24" r="23" fill="#1a4a8a"/>
+                    <circle cx="24" cy="24" r="23" fill="#1a3a5c"/>
                     <circle cx="24" cy="24" r="23" stroke="#c8960c" strokeWidth="1.5"/>
-                    <rect x="13" y="12" width="22" height="17" rx="4" fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth="1.2"/>
-                    <rect x="16" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                    <rect x="26" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-                    <rect x="16" y="24" width="16" height="3" rx="1" fill="rgba(200,150,12,0.4)" stroke="rgba(200,150,12,0.7)" strokeWidth="1"/>
-                    <rect x="11" y="32" width="26" height="10" rx="3" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" strokeWidth="1"/>
+                    <rect x="9" y="11" width="30" height="7" rx="2" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.75)" strokeWidth="1.2"/>
+                    <rect x="21" y="18" width="6" height="12" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                    <rect x="9" y="30" width="30" height="7" rx="2" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                    <rect x="12" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                    <rect x="30" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+                    <line x1="16" y1="34" x2="32" y2="34" stroke="rgba(200,150,12,0.65)" strokeWidth="1.3" strokeLinecap="round"/>
                   </svg>
                 </div>
                 <div className="typ-dots">
@@ -607,10 +546,8 @@ export default function AIChatPanel() {
                 </div>
               </div>
             )}
-
             <div ref={bottomRef} />
           </div>
-          </div>{/* /chat-scroll */}
 
           {/* End conversation button */}
           <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", padding: "3px 14px 0", background: "#f5f1eb" }}>
@@ -656,7 +593,7 @@ export default function AIChatPanel() {
             <textarea
               ref={inputRef}
               className="ai-inp"
-              placeholder="Describe your structural element…"
+              placeholder="Describe your steel member or connectionâ€¦"
               rows={1}
               value={input}
               onChange={handleInputChange}
@@ -674,17 +611,16 @@ export default function AIChatPanel() {
               </svg>
             </button>
           </div>
+        </div>
 
-        </div>{/* /ai-chat-col */}
-
-        {/* RIGHT: Prompt suggestions — desktop only */}
+        {/* RIGHT: Prompt suggestions â€” desktop only */}
         <div className="ai-suggest-col">
           <div style={{ height: 38, padding: "0 14px", borderBottom: "1px solid #ddd8cf", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", boxSizing: "border-box" }}>
             <div style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "rgba(26,74,138,.7)", letterSpacing: "1px", textTransform: "uppercase" }}>{selectedElement ? selectedElement + " Prompts" : "Prompt Examples"}</div>
             <div style={{ fontFamily: "var(--ui)", fontSize: 9, color: "var(--dim)" }}>Tap to use</div>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {(selectedElement ? (ELEMENT_PROMPTS[selectedElement] ?? DEFAULT_PROMPTS) : DEFAULT_PROMPTS).map(p => (
+            {(selectedElement ? (STEEL_PROMPTS[selectedElement] ?? DEFAULT_STEEL_PROMPTS) : DEFAULT_STEEL_PROMPTS).map(p => (
               <div
                 key={p.name}
                 className="ai-sug-card"
@@ -698,8 +634,7 @@ export default function AIChatPanel() {
             ))}
           </div>
         </div>
-
-      </div>{/* /ivory content zone */}
+      </div>
 
       {/* Bottom nav */}
       <div className="bnav" style={{ background: "rgba(245,241,235,.96)", position: "relative", zIndex: 2 }}>
@@ -737,96 +672,63 @@ export default function AIChatPanel() {
           <span>Settings</span>
         </div>
       </div>
-
     </div>
   );
 }
 
-// ─── Parameter full-names & units ────────────────────────────
-const PARAM_META: Record<string, { label: string; unit: string }> = {
-  // General
-  element_type:      { label: "Element Type",                 unit: ""      },
-  support_type:      { label: "Support Condition",            unit: ""      },
-  // Geometry
-  span:              { label: "Span",                         unit: "m"     },
-  h:                 { label: "Overall Depth",                unit: "mm"    },
-  b:                 { label: "Width",                        unit: "mm"    },
-  cover:             { label: "Cover to Reinforcement",       unit: "mm"    },
-  slab_type:         { label: "Slab Type",                    unit: ""      },
-  lateral_restraint: { label: "Lateral Restraint",            unit: ""      },
-  le_x:              { label: "Effective Length (x-axis)",    unit: "mm"    },
-  le_y:              { label: "Effective Length (y-axis)",    unit: "mm"    },
-  le_z:              { label: "Effective Length (z-axis)",    unit: "m"     },
-  le:                { label: "Member Length",                unit: "m"     },
-  L:                 { label: "Pad Length",                   unit: "m"     },
-  B:                 { label: "Pad Breadth",                  unit: "m"     },
-  col_b:             { label: "Column Width",                 unit: "mm"    },
-  col_h:             { label: "Column Depth",                 unit: "mm"    },
-  // Materials
-  fcu:               { label: "Concrete Cube Strength",       unit: "N/mm²" },
-  fy:                { label: "Steel Yield Strength",         unit: "N/mm²" },
-  py:                { label: "Steel Design Strength",        unit: "N/mm²" },
-  // Loads
-  gk:                { label: "Dead Load",                    unit: "kN/m"  },
-  qk:                { label: "Imposed Load",                 unit: "kN/m"  },
-  N_Ed:              { label: "Design Axial Force",           unit: "kN"    },
-  Mx:                { label: "Bending Moment (x-axis)",      unit: "kN·m"  },
-  My:                { label: "Bending Moment (y-axis)",      unit: "kN·m"  },
-  N_sls:             { label: "Axial Load (SLS)",             unit: "kN"    },
-  N_uls:             { label: "Axial Load (ULS)",             unit: "kN"    },
-  M_sls:             { label: "Bending Moment (SLS)",         unit: "kN·m"  },
-  qa:                { label: "Allowable Bearing Pressure",   unit: "kPa"   },
-  F_Ed:              { label: "Design Member Force",          unit: "kN"    },
+// â”€â”€â”€ Steel extracted parameters card â€” helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const STEEL_PARAM_META: Record<string, { label: string; unit: string }> = {
+  element_type:      { label: "Element Type",                unit: ""      },
+  support_type:      { label: "Support Condition",           unit: ""      },
+  span:              { label: "Span",                        unit: "m"     },
+  le:                { label: "Member Length",               unit: "m"     },
+  le_x:              { label: "Effective Length (x-axis)",   unit: "mm"    },
+  le_y:              { label: "Effective Length (y-axis)",   unit: "mm"    },
+  le_z:              { label: "Effective Length (z-axis)",   unit: "m"     },
+  lateral_restraint: { label: "Lateral Restraint",           unit: ""      },
+  py:                { label: "Steel Design Strength",       unit: "N/mmÂ²" },
+  fy:                { label: "Steel Yield Strength",        unit: "N/mmÂ²" },
+  gk:                { label: "Dead Load",                   unit: "kN/m"  },
+  qk:                { label: "Imposed Load",                unit: "kN/m"  },
+  N_Ed:              { label: "Design Axial Force",          unit: "kN"    },
+  F_Ed:              { label: "Design Member Force",         unit: "kN"    },
+  Mx:                { label: "Bending Moment (x-axis)",     unit: "kNÂ·m"  },
+  My:                { label: "Bending Moment (y-axis)",     unit: "kNÂ·m"  },
 };
 
-// Slab modules use area loads (kPa) not linear loads (kN/m)
-function getParamUnit(key: string, mod: string): string {
-  if (mod.startsWith("rc_slab") && (key === "gk" || key === "qk")) return "kPa";
-  return PARAM_META[key]?.unit ?? "";
-}
-
-// Design code options per module family
-type CodeOption = { id: string; label: string; standard: string; available: boolean };
-const RC_CODES: CodeOption[] = [
-  { id: "BS",  label: "BS 8110",  standard: "British Standard",   available: true  },
-  { id: "EC2", label: "EC 2",     standard: "Eurocode 2",         available: false },
-  { id: "ACI", label: "ACI 318",  standard: "ACI / USD",          available: false },
-];
-const STEEL_CODES: CodeOption[] = [
-  { id: "BS",  label: "BS 5950",  standard: "British Standard",   available: true  },
-  { id: "EC3", label: "EC 3",     standard: "Eurocode 3",         available: false },
-  { id: "AISC",label: "AISC 360", standard: "AISC / LRFD",        available: false },
+type SteelCodeOption = { id: string; label: string; available: boolean };
+const STEEL_CODE_LIST: SteelCodeOption[] = [
+  { id: "BS",   label: "BS 5950",  available: true  },
+  { id: "EC3",  label: "EC 3",     available: false },
+  { id: "AISC", label: "AISC 360", available: false },
 ];
 
-// Per-parameter default values (used to detect inferred/defaulted params)
-const PARAM_DEFAULTS: Record<string, string[]> = {
-  fy:                ["460"],
-  cover:             ["25", "20", "40", "50"],
-  support_type:      ["simply_supported"],
+const STEEL_PARAM_DEFAULTS: Record<string, string[]> = {
+  fy:                ["355", "275"],
   lateral_restraint: ["full"],
+  support_type:      ["simply_supported"],
   Mx:                ["0"],
   My:                ["0"],
-  M_sls:             ["0"],
 };
 
-function getVerifStatus(key: string, val: string, miss: string[]): "verified" | "inferred" | "missing" {
-  const inMissing = miss.some(m => m.toLowerCase() === key.toLowerCase() || m.toLowerCase().includes(key.toLowerCase()));
-  if (inMissing && (!val || val === "null" || val === "undefined" || val === "")) return "missing";
-  if (PARAM_DEFAULTS[key]?.includes(val.trim())) return "inferred";
+function getSteelVerifStatus(key: string, val: string, miss: string[]): "verified" | "inferred" | "missing" {
+  const inMiss = miss.some(m => m.toLowerCase() === key.toLowerCase() || m.toLowerCase().includes(key.toLowerCase()));
+  if (inMiss && (!val || val === "null" || val === "undefined" || val === "")) return "missing";
+  if (STEEL_PARAM_DEFAULTS[key]?.includes(val.trim())) return "inferred";
   return "verified";
 }
 
-// Section visual config
-const SECTION_CFG: Record<string, { color: string; bg: string; border: string; title: string }> = {
+const STEEL_SECTION_CFG: Record<string, { color: string; bg: string; border: string; title: string }> = {
   GENERAL:    { color: "#44337a", bg: "#faf5ff", border: "#d9b8fd", title: "General Information"       },
-  GEOMETRY:   { color: "#1e3a8a", bg: "#eff6ff", border: "#bfdbfe", title: "Geometry & Dimensions"    },
-  MATERIALS:  { color: "#78350f", bg: "#fffbeb", border: "#fde68a", title: "Material Properties"       },
-  LOADS:      { color: "#7f1d1d", bg: "#fff1f2", border: "#fecdd3", title: "Design Loads (Unfactored)" },
-  DESIGN:     { color: "#14532d", bg: "#f0fdf4", border: "#bbf7d0", title: "Design Parameters"         },
-  PARAMETERS: { color: "#374151", bg: "#f9fafb", border: "#e5e7eb", title: "Parameters"                },
+  GEOMETRY:   { color: "#1e3a8a", bg: "#eff6ff", border: "#bfdbfe", title: "Geometry & Dimensions"     },
+  MATERIALS:  { color: "#78350f", bg: "#fffbeb", border: "#fde68a", title: "Material Properties"        },
+  LOADS:      { color: "#7f1d1d", bg: "#fff1f2", border: "#fecdd3", title: "Design Loads (Unfactored)"  },
+  DESIGN:     { color: "#14532d", bg: "#f0fdf4", border: "#bbf7d0", title: "Design Parameters"          },
+  PARAMETERS: { color: "#374151", bg: "#f9fafb", border: "#e5e7eb", title: "Parameters"                 },
 };
 
-const SECTION_ICONS: Record<string, React.ReactNode> = {
+const STEEL_SECTION_ICONS: Record<string, React.ReactNode> = {
   GENERAL: (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -861,8 +763,8 @@ const SECTION_ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
-// ─── Extracted parameters card ─────────────────────────────────
-function ExtractedCard({
+// â”€â”€â”€ Steel extracted parameters card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SteelExtractedCard({
   content,
   elementId,
   onConfirm,
@@ -878,28 +780,19 @@ function ExtractedCard({
   const [expanded, setExpanded] = useState(true);
   const [editMode, setEditMode] = useState(false);
   useEffect(() => { if (autoEdit) setEditMode(true); }, [autoEdit]);
+  const [designCode, setDesignCode] = useState<string>(STEEL_CODE_LIST[0]!.id);
 
   let envelope: { module?: string; extracted?: Record<string, unknown>; summary?: string; confidence?: string; missing?: string[]; param_confidence?: Record<string, number> } = {};
-  try { envelope = JSON.parse(content.replace(/^__EXTRACTED__/, "")) as typeof envelope; } catch { /* ignore */ }
+  try { envelope = JSON.parse(content.replace(/^__EXTRACTED__/, "")) as typeof envelope; } catch { /* */ }
 
   const { module = "", extracted = {}, summary = "Parameters extracted. Please confirm to proceed.", confidence = "high", missing = [], param_confidence = {} } = envelope;
   const moduleLabel = MODULE_LABELS[module] ?? module.replace(/_/g, " ");
-
   const confColor = confidence === "high" ? "#15803d" : confidence === "medium" ? "#b45309" : "#b91c1c";
   const confBg    = confidence === "high" ? "#dcfce7" : confidence === "medium" ? "#fef3c7" : "#fee2e2";
-  const confLabel = confidence === "high" ? "✓ High Confidence" : confidence === "medium" ? "⚠ Medium Confidence" : "✗ Low Confidence";
+  const confLabel = confidence === "high" ? "âœ“ High Confidence" : confidence === "medium" ? "âš  Medium Confidence" : "âœ— Low Confidence";
 
-  // Determine code family from module
-  const isSteel = module.startsWith("steel_");
-  const codeOptions = isSteel ? STEEL_CODES : RC_CODES;
-  const [designCode, setDesignCode] = useState<string>(codeOptions[0]!.id);
-
-  // ── Build raw sections from extracted JSON ──
-  const GENERAL_KEYS = new Set(["element_type", "support_type", "slab_type"]);
-  const COVER_KEYS   = new Set(["cover"]);
-  const GEOM_ORDER   = ["span", "h", "b"];
+  // â”€â”€ Build raw sections from extracted JSON â”€â”€
   const SECTION_ORDER_LIST = ["GENERAL", "GEOMETRY", "MATERIALS", "LOADS", "DESIGN", "PARAMETERS"];
-
   const rawSections: { label: string; entries: [string, string][] }[] = [];
   for (const [section, val] of Object.entries(extracted)) {
     if (section === "module") continue;
@@ -913,64 +806,18 @@ function ExtractedCard({
     }
   }
 
-  // Post-process: extract general keys, move cover to design, reorder geometry
-  const GENERAL_PREF = ["slab_type", "element_type", "support_type"];
-  const generalEntries: [string, string][] = [];
-  const coverEntries:   [string, string][] = [];
-
-  let workingSecs = rawSections.map(sec => {
-    if (sec.label === "GEOMETRY") {
-      const kept: [string, string][] = [];
-      for (const entry of sec.entries) {
-        if (GENERAL_KEYS.has(entry[0]))      generalEntries.push(entry);
-        else if (COVER_KEYS.has(entry[0]))   coverEntries.push(entry);
-        else                                 kept.push(entry);
-      }
-      // Reorder: span → h → b → rest
-      const ordered: ([string, string] | undefined)[] = GEOM_ORDER.map(key => kept.find(([k]) => k === key));
-      const rest = kept.filter(([k]) => !GEOM_ORDER.includes(k));
-      return { ...sec, entries: [...ordered.filter((x): x is [string, string] => !!x), ...rest] };
-    }
-    const kept: [string, string][] = [];
-    for (const entry of sec.entries) {
-      if (GENERAL_KEYS.has(entry[0])) generalEntries.push(entry);
-      else                            kept.push(entry);
-    }
-    return { ...sec, entries: kept };
-  }).filter(sec => sec.entries.length > 0);
-
-  // Add cover entries to DESIGN section (or create it)
-  if (coverEntries.length > 0) {
-    const di = workingSecs.findIndex(s => s.label === "DESIGN");
-    if (di !== -1) {
-      workingSecs = workingSecs.map((s, i) =>
-        i === di ? { ...s, entries: [...coverEntries, ...s.entries] } : s
-      );
-    } else {
-      workingSecs.push({ label: "DESIGN", entries: coverEntries });
-    }
-  }
-
-  // Sort general entries: slab_type first, element_type, support_type, then others
-  generalEntries.sort((a, b) => {
-    const ai = GENERAL_PREF.indexOf(a[0]);
-    const bi = GENERAL_PREF.indexOf(b[0]);
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
-
-  // Build final ordered sections
+  // Order sections: standard order, then any extras
   const orderedSections: { label: string; entries: [string, string][] }[] = [];
-  if (generalEntries.length > 0) orderedSections.push({ label: "GENERAL", entries: generalEntries });
-  for (const label of SECTION_ORDER_LIST.slice(1)) {
-    const sec = workingSecs.find(s => s.label === label);
+  for (const label of SECTION_ORDER_LIST) {
+    const sec = rawSections.find(s => s.label === label);
     if (sec && sec.entries.length > 0) orderedSections.push(sec);
   }
-  for (const sec of workingSecs) {
+  for (const sec of rawSections) {
     if (!SECTION_ORDER_LIST.includes(sec.label)) orderedSections.push(sec);
   }
   const sections = orderedSections;
 
-  // ── Edits state: keyed by parameter name (k) only — unique across sections ──
+  // â”€â”€ Edits state: keyed by parameter name (k) only â”€â”€
   const [edits, setEdits] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     try {
@@ -992,8 +839,6 @@ function ExtractedCard({
   const isMissing = (key: string) =>
     (missing as string[]).some(m => m.toLowerCase() === key.toLowerCase() || m.toLowerCase().includes(key.toLowerCase()));
 
-  // Map display sections → backend section keys.
-  // GENERAL merges into "geometry"; all others map by name.
   const DISPLAY_TO_BACKEND: Record<string, string> = {
     GENERAL:    "geometry",
     GEOMETRY:   "geometry",
@@ -1003,23 +848,12 @@ function ExtractedCard({
     PARAMETERS: "parameters",
   };
 
-  // Per-key overrides: these params are displayed in a different section
-  // than what the backend validates them against.
-  const PARAM_BACKEND_SECTION: Record<string, string> = {
-    cover:        "geometry",   // shown in Design display section
-    support_type: "geometry",   // shown in General display section
-    slab_type:    "geometry",   // shown in General display section
-    element_type: "geometry",   // shown in General display section
-  };
-
   function buildPayload(): { module: string; extracted: Record<string, unknown>; designCode: string } {
     const rebuilt: Record<string, Record<string, string | number>> = {};
     for (const sec of sections) {
-      const defaultKey = DISPLAY_TO_BACKEND[sec.label] ?? sec.label.toLowerCase();
-      if (!rebuilt[defaultKey]) rebuilt[defaultKey] = {};
+      const backendKey = DISPLAY_TO_BACKEND[sec.label] ?? sec.label.toLowerCase();
+      if (!rebuilt[backendKey]) rebuilt[backendKey] = {};
       for (const [k] of sec.entries) {
-        const backendKey = PARAM_BACKEND_SECTION[k] ?? defaultKey;
-        if (!rebuilt[backendKey]) rebuilt[backendKey] = {};
         const raw = edits[k] ?? "";
         const num = parseFloat(raw);
         rebuilt[backendKey]![k] = !isNaN(num) && raw.trim() !== "" ? num : raw;
@@ -1029,34 +863,34 @@ function ExtractedCard({
   }
 
   const totalParams = sections.reduce((a, s) => a + s.entries.length, 0);
-  const selectedCodeOption = codeOptions.find(c => c.id === designCode) ?? codeOptions[0]!;
 
   return (
     <div className="ai-msg" style={{ alignItems: "flex-start", marginBottom: 12 }}>
       {/* Avatar */}
       <div className="ai-av ag" style={{ flexShrink: 0, marginTop: 4 }}>
         <svg width="26" height="26" viewBox="0 0 48 48" fill="none">
-          <circle cx="24" cy="24" r="23" fill="#1a4a8a"/>
+          <circle cx="24" cy="24" r="23" fill="#1a3a5c"/>
           <circle cx="24" cy="24" r="23" stroke="#c8960c" strokeWidth="2"/>
-          <rect x="13" y="12" width="22" height="17" rx="4" fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth="1.2"/>
-          <rect x="16" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-          <rect x="26" y="17" width="6" height="4" rx="1.5" fill="#c8960c"/>
-          <rect x="16" y="24" width="16" height="3" rx="1" fill="rgba(200,150,12,0.4)" stroke="rgba(200,150,12,0.7)" strokeWidth="1"/>
-          <rect x="11" y="32" width="26" height="10" rx="3" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" strokeWidth="1"/>
+          <rect x="9" y="11" width="30" height="7" rx="2" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.75)" strokeWidth="1.2"/>
+          <rect x="21" y="18" width="6" height="12" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+          <rect x="9" y="30" width="30" height="7" rx="2" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+          <rect x="12" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+          <rect x="30" y="13" width="6" height="3" rx="1.5" fill="#c8960c"/>
+          <line x1="16" y1="34" x2="32" y2="34" stroke="rgba(200,150,12,0.65)" strokeWidth="1.3" strokeLinecap="round"/>
         </svg>
       </div>
 
       <div style={{ flex: 1, minWidth: 0, maxWidth: "98%" }}>
 
-        {/* ── HEADER ── */}
+        {/* â”€â”€ HEADER â”€â”€ */}
         <div
           onClick={() => setExpanded(e => !e)}
           style={{
             display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
-            background: "linear-gradient(135deg,#0f2d5a 0%,#1a4a8a 50%,#1e40af 100%)",
+            background: "linear-gradient(135deg,#0d2240 0%,#1a3a5c 50%,#1e4976 100%)",
             borderRadius: expanded ? "13px 13px 0 0" : 13,
             cursor: "pointer", userSelect: "none",
-            boxShadow: "0 2px 12px rgba(26,74,138,.4)",
+            boxShadow: "0 2px 12px rgba(13,34,64,.4)",
           }}
         >
           {/* Checklist icon */}
@@ -1099,12 +933,12 @@ function ExtractedCard({
           </svg>
         </div>
 
-        {/* ── CARD BODY ── */}
+        {/* â”€â”€ CARD BODY â”€â”€ */}
         {expanded && (
           <div style={{
-            border: "1.5px solid rgba(26,74,138,.18)", borderTop: "none",
+            border: "1.5px solid rgba(13,34,64,.18)", borderTop: "none",
             borderRadius: "0 0 13px 13px", background: "#fff",
-            overflow: "hidden", boxShadow: "0 6px 24px rgba(26,74,138,.12)",
+            overflow: "hidden", boxShadow: "0 6px 24px rgba(13,34,64,.12)",
           }}>
 
             {/* AI summary */}
@@ -1124,10 +958,10 @@ function ExtractedCard({
 
             {/* Parameter sections */}
             {sections.map((sec, secIdx) => {
-              const cfg = SECTION_CFG[sec.label] ?? SECTION_CFG.PARAMETERS!;
-              const icon = SECTION_ICONS[sec.label] ?? SECTION_ICONS.PARAMETERS;
+              const cfg = STEEL_SECTION_CFG[sec.label] ?? STEEL_SECTION_CFG.PARAMETERS!;
+              const icon = STEEL_SECTION_ICONS[sec.label] ?? STEEL_SECTION_ICONS.PARAMETERS;
               return (
-                <div key={sec.label} style={{ borderTop: secIdx === 0 ? "none" : `3px solid #f0f0f0` }}>
+                <div key={sec.label} style={{ borderTop: secIdx === 0 ? "none" : "3px solid #f0f0f0" }}>
 
                   {/* Section header band */}
                   <div style={{
@@ -1140,10 +974,7 @@ function ExtractedCard({
                     <span style={{ fontFamily: "var(--mono)", fontSize: 12.5, fontWeight: 800, letterSpacing: ".6px", color: cfg.color, textTransform: "uppercase", flex: 1 }}>
                       {cfg.title}
                     </span>
-                    <span style={{
-                      fontFamily: "var(--mono)", fontSize: 9.5, color: cfg.color,
-                      background: cfg.border, padding: "2px 8px", borderRadius: 10, fontWeight: 700,
-                    }}>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: cfg.color, background: cfg.border, padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>
                       {sec.entries.length} {sec.entries.length === 1 ? "param" : "params"}
                     </span>
                   </div>
@@ -1151,15 +982,13 @@ function ExtractedCard({
                   {/* Parameter rows */}
                   <div style={{ background: "#fff" }}>
                     {sec.entries.map(([k, v], rowIdx) => {
-                      const editKey = k;
-                      const fullLabel = PARAM_META[k]?.label ?? k.replace(/_/g, " ");
-                      const unit = getParamUnit(k, module);
-                      const currentVal = edits[editKey] !== undefined ? edits[editKey] : v;
+                      const fullLabel = STEEL_PARAM_META[k]?.label ?? k.replace(/_/g, " ");
+                      const unit = STEEL_PARAM_META[k]?.unit ?? "";
+                      const currentVal = edits[k] !== undefined ? edits[k] : v;
                       const missing_ = isMissing(k) && (!currentVal || currentVal === "null" || currentVal === "undefined" || currentVal === "");
-                      // Per-parameter confidence from AI; fall back to status-derived estimate
                       const pct: number = (() => {
                         if (typeof param_confidence[k] === "number") return Math.round(param_confidence[k] as number);
-                        const vs = getVerifStatus(k, currentVal, missing as string[]);
+                        const vs = getSteelVerifStatus(k, currentVal, missing as string[]);
                         return vs === "verified" ? 92 : vs === "inferred" ? 60 : 10;
                       })();
                       const pctColor  = pct >= 80 ? "#166534" : pct >= 50 ? "#92400e" : "#b91c1c";
@@ -1179,7 +1008,7 @@ function ExtractedCard({
                           onMouseEnter={e => (e.currentTarget.style.background = cfg.bg)}
                           onMouseLeave={e => (e.currentTarget.style.background = rowIdx % 2 === 0 ? "#fff" : "rgba(0,0,0,.018)")}
                         >
-                          {/* Left: full name + key */}
+                          {/* Left: full name + key + badges */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: "var(--ui)", fontSize: 13, fontWeight: 600, color: "#1f2937", lineHeight: 1.3 }}>
                               {fullLabel}
@@ -1192,7 +1021,7 @@ function ExtractedCard({
                             <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
                               <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "#9ca3af" }}>{k}</span>
                               {(() => {
-                                const vs = getVerifStatus(k, currentVal, missing as string[]);
+                                const vs = getSteelVerifStatus(k, currentVal, missing as string[]);
                                 if (vs === "missing")  return <span style={{ fontFamily: "var(--mono)", fontSize: 8, fontWeight: 700, color: "#b91c1c", background: "#fee2e2", padding: "1px 5px", borderRadius: 3 }}>UNVERIFIED</span>;
                                 if (vs === "inferred") return <span style={{ fontFamily: "var(--mono)", fontSize: 8, fontWeight: 700, color: "#92400e", background: "#fef3c7", padding: "1px 5px", borderRadius: 3 }}>INFERRED</span>;
                                 return <span style={{ fontFamily: "var(--mono)", fontSize: 8, fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "1px 5px", borderRadius: 3 }}>VERIFIED</span>;
@@ -1214,12 +1043,12 @@ function ExtractedCard({
                               <input
                                 type="text"
                                 value={currentVal}
-                                onChange={e => setEdits(prev => ({ ...prev, [editKey]: e.target.value }))}
+                                onChange={e => setEdits(prev => ({ ...prev, [k]: e.target.value }))}
                                 onClick={e => e.stopPropagation()}
                                 style={{
                                   fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700,
-                                  color: cfg.color,
-                                  background: cfg.bg, border: `1.5px solid ${cfg.border}`,
+                                  color: cfg.color, background: cfg.bg,
+                                  border: `1.5px solid ${cfg.border}`,
                                   borderRadius: 7, padding: "5px 9px", width: 90, outline: "none",
                                   textAlign: "right",
                                 }}
@@ -1230,7 +1059,7 @@ function ExtractedCard({
                                 color: missing_ ? "#b91c1c" : cfg.color,
                                 minWidth: 48, textAlign: "right",
                               }}>
-                                {missing_ ? "—" : currentVal}
+                                {missing_ ? "â€”" : currentVal}
                               </span>
                             )}
                             {unit && (
@@ -1253,17 +1082,17 @@ function ExtractedCard({
               );
             })}
 
-            {/* ── DESIGN CODE SELECTOR ── */}
+            {/* â”€â”€ DESIGN CODE SELECTOR â”€â”€ */}
             <div style={{
               borderTop: "3px solid #e8e2d9",
-              background: "linear-gradient(135deg,#f8faff 0%,#eff6ff 100%)",
+              background: "linear-gradient(135deg,#f8faff 0%,#eef4ff 100%)",
               padding: "14px 16px 16px",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1e3a8a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1a3a5c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".8px", color: "#1e3a8a", textTransform: "uppercase" }}>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 800, letterSpacing: ".8px", color: "#1a3a5c", textTransform: "uppercase" }}>
                   Design Standard
                 </span>
                 <span style={{ fontFamily: "var(--ui)", fontSize: 11, color: "#6b7280", marginLeft: 4 }}>
@@ -1271,7 +1100,7 @@ function ExtractedCard({
                 </span>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {codeOptions.map(opt => {
+                {STEEL_CODE_LIST.map(opt => {
                   const isActive = designCode === opt.id;
                   return (
                     <button
@@ -1281,14 +1110,13 @@ function ExtractedCard({
                       style={{
                         position: "relative",
                         display: "inline-flex", alignItems: "center", gap: 5,
-                        padding: "5px 12px",
-                        borderRadius: 20,
-                        border: isActive ? "2px solid #1e3a8a" : "1.5px solid #d1d5db",
-                        background: isActive ? "linear-gradient(135deg,#1e3a8a,#1a4a8a)" : opt.available ? "#fff" : "#f9fafb",
+                        padding: "5px 12px", borderRadius: 20,
+                        border: isActive ? "2px solid #1a3a5c" : "1.5px solid #d1d5db",
+                        background: isActive ? "linear-gradient(135deg,#0d2240,#1a3a5c)" : opt.available ? "#fff" : "#f9fafb",
                         cursor: opt.available ? "pointer" : "not-allowed",
                         opacity: opt.available ? 1 : 0.65,
                         transition: "all .2s",
-                        boxShadow: isActive ? "0 2px 8px rgba(30,58,138,.3)" : "none",
+                        boxShadow: isActive ? "0 2px 8px rgba(13,34,64,.3)" : "none",
                       }}
                     >
                       {isActive && (
@@ -1298,17 +1126,13 @@ function ExtractedCard({
                       )}
                       <span style={{
                         fontFamily: "var(--mono)", fontSize: 11, fontWeight: 800,
-                        color: isActive ? "#fff" : opt.available ? "#1e3a8a" : "#9ca3af",
+                        color: isActive ? "#fff" : opt.available ? "#1a3a5c" : "#9ca3af",
                         letterSpacing: ".2px",
                       }}>
                         {opt.label}
                       </span>
                       {!opt.available && (
-                        <span style={{
-                          fontFamily: "var(--mono)", fontSize: 7.5, fontWeight: 700,
-                          color: "#9ca3af", background: "#e5e7eb",
-                          padding: "0px 4px", borderRadius: 3,
-                        }}>
+                        <span style={{ fontFamily: "var(--mono)", fontSize: 7.5, fontWeight: 700, color: "#9ca3af", background: "#e5e7eb", padding: "0px 4px", borderRadius: 3 }}>
                           SOON
                         </span>
                       )}
@@ -1318,7 +1142,7 @@ function ExtractedCard({
               </div>
             </div>
 
-            {/* ── FOOTER TOOLBAR ── */}
+            {/* â”€â”€ FOOTER TOOLBAR â”€â”€ */}
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "10px 16px", borderTop: "1.5px solid #e8e2d9",
@@ -1329,11 +1153,11 @@ function ExtractedCard({
                   onClick={e => { e.stopPropagation(); setEditMode(m => !m); }}
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 6,
-                    background: editMode ? "rgba(26,74,138,.1)" : "#fff",
-                    border: editMode ? "1.5px solid #1a4a8a" : "1.5px solid #d1d5db",
+                    background: editMode ? "rgba(13,34,64,.1)" : "#fff",
+                    border: editMode ? "1.5px solid #1a3a5c" : "1.5px solid #d1d5db",
                     borderRadius: 8, padding: "6px 13px", cursor: "pointer",
                     fontFamily: "var(--mono)", fontSize: 11, fontWeight: 700,
-                    color: editMode ? "#1a4a8a" : "#374151",
+                    color: editMode ? "#1a3a5c" : "#374151",
                     transition: "all .18s",
                   }}
                 >
@@ -1352,7 +1176,7 @@ function ExtractedCard({
                     color: "#6b7280", transition: "all .18s",
                   }}
                 >
-                  ↺ Start Over
+                  â†º Start Over
                 </button>
               </div>
               <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "#9ca3af" }}>
@@ -1360,7 +1184,7 @@ function ExtractedCard({
               </span>
             </div>
 
-            {/* ── CONFIRM BUTTON ── */}
+            {/* â”€â”€ CONFIRM BUTTON â”€â”€ */}
             <div style={{ padding: "0 16px 16px" }}>
               <button
                 onClick={e => { e.stopPropagation(); onConfirm(buildPayload()); }}
@@ -1390,6 +1214,3 @@ function ExtractedCard({
     </div>
   );
 }
-
-
-

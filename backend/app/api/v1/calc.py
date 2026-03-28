@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 from app.db import runs_repo
+from app.ai import extractor as ai_extractor
 
 # ── Module registry ───────────────────────────────────────────────────────────
 # Maps module identifier strings to importable Python paths.
@@ -46,9 +48,21 @@ def create_app() -> Flask:
     app = Flask(__name__)
     api_auth_key = os.getenv("API_AUTH_KEY", "").strip()
 
+    # CORS — registered first so its before_request handles OPTIONS preflight
+    # before our auth middleware ever runs.
+    CORS(
+        app,
+        origins=[r"http://localhost:.*", r"http://127\.0\.0\.1:.*"],
+        allow_headers=["Content-Type", "X-API-Key"],
+        methods=["GET", "POST", "OPTIONS"],
+        max_age=86400,
+    )
+
     @app.before_request
     def enforce_api_key():
         # Auth applies only to API routes and is opt-in via API_AUTH_KEY.
+        if request.method == "OPTIONS":
+            return None  # CORS preflight always allowed
         if not api_auth_key:
             return None
         if not request.path.startswith("/api/v1/"):
@@ -155,6 +169,29 @@ def create_app() -> Flask:
             }), 404
         return jsonify(row), 200
 
+    # ── POST /api/v1/report/render ────────────────────────────────────────────
+    @app.post("/api/v1/report/render")
+    def render_report():
+        """
+        Render formula steps through the Python handcalcs engine.
+        Accepts  { steps: [{ label, expression, value, unit?, clause? }, ...] }
+        Returns  { status:"ok", engine:"handcalcs"|"fallback", items:[...] }
+        """
+        payload: dict[str, Any] = request.get_json(silent=True) or {}
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list):
+            return jsonify({
+                "status": "error",
+                "error": {"code": "VALIDATION_ERROR", "message": "'steps' must be a list."},
+            }), 400
+
+        from app.reporting.handcalcs_report import render_formula_steps  # noqa: PLC0415
+        result = render_formula_steps([
+            {k: v for k, v in s.items() if isinstance(s, dict)}
+            for s in steps if isinstance(s, dict)
+        ])
+        return jsonify({"status": "ok", **result}), 200
+
     # ── POST /api/v1/reports/:runId/generate ─────────────────────────────────
     @app.post("/api/v1/reports/<run_id>/generate")
     def generate_report(run_id: str):
@@ -188,5 +225,38 @@ def create_app() -> Flask:
             "artifactType": artifact["artifact_type"],
             "createdAt": datetime.now(timezone.utc).isoformat(),
         }), 200
+
+    # ── POST /api/v1/ai/extract ──────────────────────────────────────────────
+    @app.post("/api/v1/ai/extract")
+    def ai_extract():
+        payload: dict[str, Any] = request.get_json(silent=True) or {}
+        description = (payload.get("description") or "").strip()
+        if not description:
+            return jsonify({
+                "status": "error",
+                "error": {"code": "VALIDATION_ERROR", "message": "Field 'description' is required."},
+            }), 400
+
+        try:
+            result = ai_extractor.extract_params(description)
+            return jsonify({
+                "status":           "ok",
+                "module":           result.get("module"),
+                "extracted":        result.get("extracted", {}),
+                "summary":          result.get("summary", "Parameters extracted successfully."),
+                "confidence":       result.get("confidence", "medium"),
+                "missing":          result.get("missing", []),
+                "param_confidence": result.get("param_confidence", {}),
+            }), 200
+        except ValueError as e:
+            return jsonify({
+                "status": "error",
+                "error": {"code": "AI_NOT_CONFIGURED", "message": str(e)},
+            }), 503
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "error": {"code": "AI_ERROR", "message": f"AI extraction failed: {str(e)}"},
+            }), 500
 
     return app

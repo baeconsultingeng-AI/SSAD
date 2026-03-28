@@ -136,209 +136,246 @@
 
 ## 5) Step-by-Step Production Deployment Runbook
 
-### Phase 0: Git repository initialization (PREREQUISITE — must complete before any CI/CD runs)
+### Phase 0: Workspace readiness and repository state
 
-**Status: BLOCKED — no .git directory detected in SSAD folder as of 2026-03-25**
+Status as of 2026-03-25:
+- Repository initialized and connected: https://github.com/baeconsultingeng-AI/SSAD
+- Branch tracking configured: main -> origin/main
+- Local quality gates verified in this workspace:
+	- backend tests: 164 passed
+	- frontend type-check: pass
+	- frontend build: pass
+	- local backend health probe: GET /health returned status ok
 
-No git repository has been initialized in this project. GitHub Actions CI/CD cannot run until this is complete.
+### Phase 1: Local pre-deployment preview (mandatory before staging)
 
-1. Initialize the repository
+Objective:
+- Validate application behavior locally and apply code changes before any cloud deployment.
+
+What Copilot already completed:
+- Confirmed backend test suite and frontend build gates pass locally.
+- Confirmed backend service starts and responds on /health.
+
+What you execute manually now:
+
+1. Prepare local environment files
+- Backend file: copy backend/.env.example -> backend/.env
+- Frontend file: copy frontend/.env.local.example -> frontend/.env.local
+- Fill values for local testing:
+	- backend/.env
+		- SUPABASE_URL
+		- SUPABASE_SERVICE_ROLE_KEY
+		- API_AUTH_KEY (optional; leave empty to disable key guard locally)
+		- FLASK_RUN_HOST=127.0.0.1
+		- FLASK_RUN_PORT=5000
+		- FLASK_DEBUG=0
+	- frontend/.env.local
+		- NEXT_PUBLIC_API_URL=http://localhost:5000
+		- NEXT_PUBLIC_SUPABASE_URL
+		- NEXT_PUBLIC_SUPABASE_ANON_KEY
+		- NEXT_PUBLIC_API_AUTH_KEY (only if backend API_AUTH_KEY is set)
+
+2. Start backend
 ```bash
-cd "C:\Users\MacBook\Desktop\BaeSoftIA\SSAD"
-git init -b main
+cd backend
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe -m pip install -r requirements.txt
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe app.py
 ```
 
-2. Create a `.gitignore` at repo root (if one does not exist, create it now):
-```
-# Python
-backend/__pycache__/
-backend/.pytest_cache/
-backend/.env
-backend/app/__pycache__/
-backend/app/**/__pycache__/
-
-# Node
-frontend/node_modules/
-frontend/.next/
-frontend/.env.local
-
-# General
-.DS_Store
-*.pyc
-```
-
-3. Stage all files and make the first commit
+3. Start frontend in a second terminal
 ```bash
-git add .
-git commit -m "chore: initial commit — Stage 3 implementation baseline"
+cd frontend
+npm ci
+npm run dev
 ```
 
-4. Create a GitHub repository
-- Go to https://github.com/new
-- Set repository name (e.g., `ssad`)
-- Set visibility (private recommended)
-- Do NOT initialize with README, .gitignore, or license (repo already has content)
+4. Local browser acceptance checklist
+- Open http://localhost:3000
+- Validate this full flow:
+	- workspace opens
+	- run a sample calculation
+	- result panel renders
+	- report panel renders
+	- detailing panel renders
+	- projects page loads
+	- replay a prior run
+	- report metadata generation succeeds
 
-5. Add remote and push
+5. Local API smoke (optional but recommended)
 ```bash
-git remote add origin https://github.com/<your-org-or-username>/ssad.git
-git push -u origin main
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url http://127.0.0.1:5000 --project-id <existing-project-uuid> --api-key <optional-api-key>
 ```
 
-6. Verify GitHub Actions appears in the Actions tab of the new repo.
-   - The `push.branches: ["main"]` trigger will fire a CI run on the first push.
-   - Confirm `backend-tests`, `frontend-checks`, and `docs-presence` jobs all pass.
+Exit criteria for Phase 1:
+- No critical UX regressions
+- No critical API errors in local flow
+- Any required code changes applied before staging
 
-### Phase A: Pre-deployment freeze and checks
+### Phase 2: GitHub deployment controls (manual)
 
-1. Freeze release scope
-- Ensure no open high-severity defects.
-- Tag release candidate branch.
+1. Configure GitHub repository secrets
+- AZURE_CREDENTIALS
+- AZURE_BACKEND_WEBAPP_NAME_STAGING
+- AZURE_FRONTEND_WEBAPP_NAME_STAGING
+- AZURE_BACKEND_WEBAPP_NAME_PRODUCTION
+- AZURE_FRONTEND_WEBAPP_NAME_PRODUCTION
+- STAGING_BACKEND_HEALTH_URL
+- PRODUCTION_BACKEND_HEALTH_URL
 
-2. Run local/CI quality gates
-- Backend: pytest tests/ -q
-- Frontend: npm run type-check
-- Frontend: npm run build
-- Confirm all pass.
+2. Configure GitHub environments
+- Create environment: staging
+- Create environment: production
+- Add required reviewer gate for production
+- Optional: set wait timer for production
 
-3. Prepare production secrets
-- Backend required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, API_AUTH_KEY
-- Frontend required: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-- Frontend optional when API_AUTH_KEY is enabled: NEXT_PUBLIC_API_AUTH_KEY
-- Store in secure secret manager (GitHub Environments/Azure App Settings).
+3. Verify workflow visibility
+- Open GitHub Actions in baeconsultingeng-AI/SSAD
+- Confirm workflow file ci.yml exists and is runnable via workflow_dispatch
 
-### Phase B: Database production rollout
+### Phase 3: Supabase production rollout (manual)
 
-1. Backup production database
-- Trigger pre-migration backup/snapshot in Supabase.
+1. Pre-check and backup
+- Create a production backup/snapshot in Supabase.
+- Confirm maintenance window and rollback owner.
 
 2. Apply migrations in order
-- Run 20240101000000_init.sql
-- Run 20240201000000_sprint2.sql
+- 20240101000000_init.sql
+- 20240201000000_sprint2.sql
 
-3. Verify schema and RLS
-- Confirm required tables exist.
-- Confirm constraints and RLS policies are active.
-- Insert and read test data using service role only.
+3. Execute verification checklist
+- Run all SQL checks in docs/program/Supabase-Production-Migration-Verification-Checklist-2026-03-24.md
+- Record all outputs in docs/program/Production-GoLive-Execution-Sheet-2026-03-24.md
 
-### Phase C: Backend production deploy (Azure)
+Exit criteria for Phase 3:
+- Tables, constraints, indexes, RLS, policies, and triggers verified
+- Service-role smoke transaction passes
 
-1. Build and package backend
-- Use Python 3.11+ runtime.
-- Install dependencies from backend/requirements.txt.
+### Phase 4: Azure staging deployment (manual)
 
-2. Configure environment
-- Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend app settings.
-- Disable debug mode in production startup configuration.
+1. Trigger staging workflow
+```bash
+gh workflow run ci.yml -f deploy_staging=true -f deploy_production=false
+gh run list --workflow ci.yml --limit 5
+gh run watch
+```
 
-3. Deploy backend app
-- Deploy to Azure App Service or Container App.
-- Expose HTTPS endpoint.
+2. Verify staging backend health
+- Call STAGING_BACKEND_HEALTH_URL
+- Expect HTTP 200 and body with status ok
 
-4. Post-deploy backend checks
-- Call /health and confirm status ok.
-- Execute a calc request and confirm status ok.
-- Verify run persistence and report metadata creation endpoint behavior.
+3. Run staging API smoke
+```bash
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url <staging-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
+```
 
-### Phase D: Frontend production deploy (Azure)
+4. Run staging UI smoke
+- Validate the same flow used in local acceptance checklist.
 
-1. Build frontend
-- next build
+Exit criteria for Phase 4:
+- Staging deployment succeeds
+- Staging health probe succeeds
+- API smoke and UI smoke both pass
 
-2. Configure environment
-- NEXT_PUBLIC_API_URL should point to production backend HTTPS URL.
-- Set Supabase public URL and anon key.
+### Phase 5: Cloudflare cutover preparation (manual)
 
-3. Deploy frontend app
-- Deploy to Azure Static Web Apps or App Service.
+Use this phase only when staging is green.
 
-4. Post-deploy frontend checks
-- Open workspace, run sample calc, confirm result/report/detailing render.
-- Open projects page, load project runs, replay run, generate report metadata.
+1. DNS records
+- Create/confirm proxied DNS records for:
+	- api.<your-domain> -> production backend host
+	- app.<your-domain> -> production frontend host
 
-### Phase E: Production smoke and sign-off
+2. SSL/TLS
+- Set SSL mode to Full (strict)
+- Confirm valid origin certificates on Azure targets
 
-1. Execute smoke script
-- Flow: calculate -> runId -> project runs retrieval -> report metadata creation.
+3. Caching and rules
+- Disable aggressive caching for API routes (/api/*)
+- Keep caching for static frontend assets only
+- If using WAF rules, allow required methods: GET, POST, OPTIONS
 
-2. Verify observability
-- Confirm app logs show successful request traces.
-- Confirm error dashboards and alert rules are active.
+4. CORS sanity check
+- Ensure backend allows frontend production origin
+- Verify preflight OPTIONS requests return valid headers
 
-3. Approve release
-- Product sign-off and engineering sign-off.
-- Tag release and publish release notes.
+Exit criteria for Phase 5:
+- app and api hostnames resolve correctly
+- HTTPS green lock for both hostnames
+- no 403/5xx introduced by proxy/firewall rules
 
-### Phase F: Rollback plan
+### Phase 6: Production deployment (manual, approval gated)
 
-1. Trigger rollback conditions
-- Elevated 5xx rates, critical workflow breakage, or data integrity issues.
+1. Trigger production workflow
+```bash
+gh workflow run ci.yml -f deploy_staging=false -f deploy_production=true
+gh run list --workflow ci.yml --limit 5
+gh run watch
+```
 
-2. Backend rollback
-- Revert deployment to previous stable build in Azure.
+2. Complete GitHub production approval
+- Approve environment gate when prompted
 
-3. Frontend rollback
-- Revert to previous deployment slot/build.
+3. Post-deploy health and smoke
+- Check PRODUCTION_BACKEND_HEALTH_URL
+- Run production API smoke:
+```bash
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url <production-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
+```
 
-4. Data rollback decision
-- If migration-related issue: restore from backup snapshot after incident review.
+4. Production UI acceptance
+- Validate workspace -> result -> report -> detailing -> projects replay flow
 
-## 5.1) GitHub Deployment Secrets Checklist
+Exit criteria for Phase 6:
+- Deploy job succeeded
+- Approval recorded
+- API smoke pass
+- UI smoke pass
 
-Configure these repository secrets before enabling staged/prod deployment jobs:
+### Phase 7: Release sign-off and rollback readiness
 
-1. AZURE_CREDENTIALS
-- Azure service principal credentials JSON for github action login.
+1. Complete execution evidence
+- Fill all evidence blocks in docs/program/Production-GoLive-Execution-Sheet-2026-03-24.md
 
-2. AZURE_BACKEND_WEBAPP_NAME_STAGING
-- Azure App Service name for staging backend.
+2. Final decision
+- Engineering lead and product owner set Go or No-Go.
 
-3. AZURE_FRONTEND_WEBAPP_NAME_STAGING
-- Azure App Service name for staging frontend.
+3. Rollback trigger conditions
+- elevated 5xx rates
+- critical workflow failure
+- data integrity anomaly
 
-4. AZURE_BACKEND_WEBAPP_NAME_PRODUCTION
-- Azure App Service name for production backend.
+4. Rollback actions
+- backend: revert to previous stable deployment in Azure
+- frontend: revert to previous stable deployment in Azure
+- database: restore snapshot only after incident approval
 
-5. AZURE_FRONTEND_WEBAPP_NAME_PRODUCTION
-- Azure App Service name for production frontend.
+## 5.1) Manual Inputs Checklist (You Must Provide)
 
-6. STAGING_BACKEND_HEALTH_URL (recommended)
-- Full URL to staging backend health endpoint, for example: https://staging-api.example.com/health
+GitHub:
+1. Repository admin access for secrets and environments
+2. GitHub account access for manual workflow dispatch approvals
 
-7. PRODUCTION_BACKEND_HEALTH_URL (recommended)
-- Full URL to production backend health endpoint, for example: https://api.example.com/health
+Azure:
+1. Service principal credentials JSON for AZURE_CREDENTIALS
+2. Staging backend web app name
+3. Staging frontend web app name
+4. Production backend web app name
+5. Production frontend web app name
 
-## 5.2) GitHub Environment Approval Setup
+Supabase:
+1. Production project URL
+2. Service role key
+3. SQL editor/project access for migration and verification
 
-1. Create environments
-- staging
-- production
+Cloudflare:
+1. Zone admin access
+2. Domain/subdomain DNS control for app and api hostnames
 
-2. Configure protection rules
-- staging: optional reviewer gate, wait timer optional.
-- production: required reviewer gate mandatory, wait timer recommended.
-
-3. Restrict secret scope
-- Put deployment secrets at environment-level where possible.
-- Keep production secrets only in production environment.
-
-4. Verification after setup
-- Run workflow_dispatch with deploy_staging=true and confirm staging deployment.
-- Run workflow_dispatch with deploy_production=true and confirm approval gate appears.
-
-## 5.3) GitHub CLI Execution Commands (Agent 09)
-
-Use these commands from repository root after installing and authenticating `gh`.
-
-1. Authenticate GitHub CLI
+## 5.2) Commands You Will Run Manually
 
 ```bash
 gh auth login
-```
 
-2. Set repository-level secrets
-
-```bash
 gh secret set AZURE_CREDENTIALS < azure_credentials.json
 gh secret set AZURE_BACKEND_WEBAPP_NAME_STAGING --body "<staging-backend-app-name>"
 gh secret set AZURE_FRONTEND_WEBAPP_NAME_STAGING --body "<staging-frontend-app-name>"
@@ -346,26 +383,20 @@ gh secret set AZURE_BACKEND_WEBAPP_NAME_PRODUCTION --body "<production-backend-a
 gh secret set AZURE_FRONTEND_WEBAPP_NAME_PRODUCTION --body "<production-frontend-app-name>"
 gh secret set STAGING_BACKEND_HEALTH_URL --body "https://<staging-backend-domain>/health"
 gh secret set PRODUCTION_BACKEND_HEALTH_URL --body "https://<production-backend-domain>/health"
-```
 
-3. Trigger staging deployment manually
-
-```bash
 gh workflow run ci.yml -f deploy_staging=true -f deploy_production=false
-```
-
-4. Trigger production deployment manually
-
-```bash
 gh workflow run ci.yml -f deploy_staging=false -f deploy_production=true
-```
 
-5. Watch deployment run status
-
-```bash
 gh run list --workflow ci.yml --limit 5
 gh run watch
 ```
+
+## 5.3) Do-Not-Proceed Rules
+
+1. Do not deploy staging if Phase 1 local acceptance fails.
+2. Do not deploy production if Supabase verification (Phase 3) is incomplete.
+3. Do not update Cloudflare DNS to production until staging smoke is green.
+4. Do not mark Go-Live complete until all evidence fields are filled.
 
 ## 6) Reporting Format Going Forward
 

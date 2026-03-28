@@ -1,49 +1,150 @@
-"use client";
+﻿"use client";
 
 import { useWorkspace } from "@/context/WorkspaceContext";
 
-// ─── Parity: "detailing" screen ──────────────────────────
+// â”€â”€â”€ Parity: "detailing" screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function DetailingPanel() {
   const { calcResult, goScreen } = useWorkspace();
 
   if (!calcResult) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        No detailing available.
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#f0ece4" }}>
+        <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "#8a7d72" }}>No detailing available.</div>
       </div>
     );
   }
 
   const payload = calcResult.detailingPayload;
+  const elementName = typeof payload.element === "string"
+    ? payload.element.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+    : "Element Detailing";
+  const today = new Date().toLocaleDateString("en-GB");
+  const isSteel      = calcResult.module.startsWith("steel_");
+  const themeColor   = isSteel ? "#1a3a5c" : "#1a4a8a";
+  const verdict      = calcResult.results.verdict;
+  const verdictColor = verdict === "pass" ? "var(--grn)" : verdict === "warn" ? "var(--amb)" : "var(--red)";
+  const verdictText  = verdict === "pass" ? "PASS ✓" : verdict === "warn" ? "WARN ⚠" : "FAIL ✗";
 
   return (
-    <div className="p-6 max-w-3xl mx-auto w-full overflow-y-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-text">Structural Detailing</h1>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#f0ece4", overflow: "hidden" }}>
+
+      {/* Status bar */}
+      <div className="sb" style={{ background: themeColor, color: "#fff" }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>9:41</span>
+        <span style={{ fontSize: 11 }}>â—â—â— ðŸ”‹</span>
+      </div>
+
+      {/* Blue header */}
+      <div style={{ background: themeColor, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexShrink: 0 }}>
         <button
           onClick={() => goScreen("report")}
-          className="text-sm text-text-muted hover:text-text transition-colors"
+          style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.2)", color: "#fff", padding: "6px 12px", borderRadius: 8, fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
         >
-          ← Report
+          â€¹ Report
+        </button>
+        <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--ser)", fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: "-.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            Element Detailing
+          </div>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 8, color: "rgba(200,150,12,.8)", marginTop: 1, letterSpacing: ".4px" }}>
+            SSAD Â· BAE Consulting Engineers
+          </div>
+        </div>
+        <button
+          onClick={() => alert("PDF export in production build")}
+          style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0, background: "rgba(200,150,12,.2)", border: "1.5px solid rgba(200,150,12,.5)", color: "rgba(200,150,12,.95)", padding: "6px 11px", borderRadius: 8, fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7,10 12,15 17,10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          PDF
         </button>
       </div>
 
-      {/* Detailing canvas placeholder */}
-      {/* Element schematic */}
-      <ElementSchematic payload={payload} />
+      {/* Scrollable content */}
+      <div className="scr" style={{ background: "var(--bg2)", padding: "12px 14px 28px" }}>
 
-      <button
-        onClick={goScreen.bind(null, "workspace")}
-        className="mt-6 px-4 py-2 text-text-muted text-sm hover:text-text transition-colors"
-      >
-        Back to Workspace
-      </button>
+        {/* Info strip */}
+        <div style={{ background: "#fff", border: "1px solid var(--bdr)", borderRadius: 10, padding: "10px 14px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontFamily: "var(--ser)", fontSize: 13, fontWeight: 700, color: "var(--txt)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {elementName}
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 8, color: "var(--mut)", marginTop: 2 }}>
+              Code: {calcResult.code} Â· Module: {calcResult.module}
+            </div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: verdictColor }}>
+              {verdictText}
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 8, color: "var(--dim)", marginTop: 1 }}>{today}</div>
+          </div>
+        </div>
+
+        {/* Disclaimer strip */}
+        <div style={{ background: "rgba(200,150,12,.07)", border: "1px solid rgba(200,150,12,.2)", borderRadius: 8, padding: "7px 12px", marginBottom: 12, fontFamily: "var(--mono)", fontSize: 9, color: "var(--mut)", lineHeight: 1.5 }}>
+          âš ï¸ Schematic sketches for site verification only Â· Confirm bar placement and cover before pour Â· Not for issue as a construction drawing without engineer certification
+        </div>
+
+        {/* Element schematic drawings */}
+        <ElementSchematic payload={payload} />
+
+        {/* Footer */}
+        <div style={{ marginTop: 16, textAlign: "center", fontFamily: "var(--mono)", fontSize: 8, color: "var(--dim)", lineHeight: 1.8 }}>
+          Generated by SSAD v1.0 Â· BAE Consulting Engineers Â· CEng MIStructE
+        </div>
+
+      </div>
+
+      {/* Bottom nav */}
+      <div className="bnav">
+        <div className="bni" onClick={() => goScreen("workspace")} role="button" tabIndex={0}>
+          <div className="bni-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12l9-9 9 9M5 10v9a1 1 0 001 1h4v-5h4v5h4a1 1 0 001-1v-9"/>
+            </svg>
+          </div>
+          <span>Home</span>
+        </div>
+        <div className="bni on">
+          <div className="bni-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+          </div>
+          <span>Detailing</span>
+        </div>
+        <div className="bni" onClick={() => goScreen("report")} role="button" tabIndex={0}>
+          <div className="bni-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+            </svg>
+          </div>
+          <span>Report</span>
+        </div>
+        <div className="bni" onClick={() => goScreen("projects")} role="button" tabIndex={0}>
+          <div className="bni-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M3 7h18M3 12h18M3 17h18"/>
+            </svg>
+          </div>
+          <span>Projects</span>
+        </div>
+      </div>
+
     </div>
   );
 }
 
-    // ─── Schematic router ────────────────────────────────────
+    // â”€â”€â”€ Schematic router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function ElementSchematic({ payload }: { payload: Record<string, unknown> }) {
       const element = typeof payload.element === "string" ? payload.element : "";
@@ -59,7 +160,7 @@ export default function DetailingPanel() {
       return <GenericSchematic p={payload} />;
     }
 
-    // ─── RC Beam ─────────────────────────────────────────────
+    // â”€â”€â”€ RC Beam â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function RcBeamSchematic({ p }: { p: Record<string, unknown> }) {
       const dim = (p.dimensions ?? {}) as Record<string, number>;
@@ -89,8 +190,8 @@ export default function DetailingPanel() {
           <div className="flex gap-6 flex-wrap">
             {/* Cross-section */}
             <div className="flex-1 min-w-[200px]">
-              <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Cross-Section</p>
-              <svg viewBox="0 0 200 260" className="w-full max-w-[220px] border border-border rounded-lg bg-surface-card">
+              <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Cross-Section</p>
+              <svg viewBox="0 0 200 260" style={{ width: "100%", maxWidth: "220px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
                 {/* Concrete outline */}
                 <rect x={left} y={top} width={bPx} height={hPx} fill="#94a3b8" fillOpacity={0.15} stroke="#94a3b8" strokeWidth={1.5} />
                 {/* Cover lines */}
@@ -120,13 +221,13 @@ export default function DetailingPanel() {
             </div>
             {/* Key data */}
             <div className="flex-1 min-w-[180px] space-y-2">
-              <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+              <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
               <KeyValueList rows={[
-                ["b × h", `${b} × ${h} mm`],
+                ["b Ã— h", `${b} Ã— ${h} mm`],
                 ["Effective depth d", `${d.toFixed(0)} mm`],
                 ["Cover", `${cover} mm`],
                 ["Span", `${span} m`],
-                ["As,design", asReq != null ? `${asReq} mm²` : "—"],
+                ["As,design", asReq != null ? `${asReq} mmÂ²` : "â€”"],
                 ["Tension zone", tensionZone],
                 ["Compression steel", compSteel ? "Required" : "Not required"],
               ]} />
@@ -136,7 +237,7 @@ export default function DetailingPanel() {
       );
     }
 
-    // ─── RC Column ───────────────────────────────────────────
+    // â”€â”€â”€ RC Column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function RcColumnSchematic({ p }: { p: Record<string, unknown> }) {
       const dim = (p.dimensions ?? {}) as Record<string, number>;
@@ -163,8 +264,8 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Cross-Section</p>
-            <svg viewBox="0 0 200 200" className="w-full max-w-[200px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Cross-Section</p>
+            <svg viewBox="0 0 200 200" style={{ width: "100%", maxWidth: "200px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               <rect x={left} y={top} width={bPx} height={hPx} fill="#94a3b8" fillOpacity={0.15} stroke="#94a3b8" strokeWidth={1.5} />
               <rect x={left + coverPx} y={top + coverPx} width={bPx - 2 * coverPx} height={hPx - 2 * coverPx}
                 fill="none" stroke="#64748b" strokeWidth={0.5} strokeDasharray="3 2" />
@@ -176,18 +277,18 @@ export default function DetailingPanel() {
             </svg>
           </div>
           <div className="flex-1 min-w-[180px] space-y-2">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
-              ["b × h", `${b} × ${h} mm`],
+              ["b Ã— h", `${b} Ã— ${h} mm`],
               ["Cover", `${cover} mm`],
-              ["Asc,design", Asc != null ? `${Asc} mm²` : "—"],
+              ["Asc,design", Asc != null ? `${Asc} mmÂ²` : "â€”"],
             ]} />
           </div>
         </div>
       );
     }
 
-    // ─── RC Slab ─────────────────────────────────────────────
+    // â”€â”€â”€ RC Slab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function RcSlabSchematic({ p }: { p: Record<string, unknown> }) {
       const dim = (p.dimensions ?? {}) as Record<string, unknown>;
@@ -207,8 +308,8 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Elevation (Section)</p>
-            <svg viewBox={`0 0 260 ${viewH}`} className="w-full max-w-[280px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Elevation (Section)</p>
+            <svg viewBox={`0 0 260 ${viewH}`} style={{ width: "100%", maxWidth: "280px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               <rect x={20} y={slabY} width={slabW} height={slabH} fill="#94a3b8" fillOpacity={0.18} stroke="#94a3b8" strokeWidth={1.5} />
               {/* Main steel line */}
               <line x1={30} y1={slabY + slabH - cover * 0.15 - 3} x2={230} y2={slabY + slabH - cover * 0.15 - 3}
@@ -225,20 +326,20 @@ export default function DetailingPanel() {
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
               ["Thickness h", `${h} mm`],
               ["Span lx", `${lx} m`],
               ...(ly > 0 ? [["Long span ly", `${ly} m`]] as [string, string][] : []),
               ["Cover", `${cover} mm`],
-              ["Main As", mainAs != null ? `${mainAs} mm²/m` : "—"],
+              ["Main As", mainAs != null ? `${mainAs} mmÂ²/m` : "â€”"],
             ]} />
           </div>
         </div>
       );
     }
 
-    // ─── RC Foundation ───────────────────────────────────────
+    // â”€â”€â”€ RC Foundation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function RcFoundationSchematic({ p }: { p: Record<string, unknown> }) {
       const dim = (p.dimensions ?? {}) as Record<string, number>;
@@ -256,8 +357,8 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Plan View</p>
-            <svg viewBox="0 0 240 200" className="w-full max-w-[240px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Plan View</p>
+            <svg viewBox="0 0 240 200" style={{ width: "100%", maxWidth: "240px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               <rect x={cx - LPx / 2} y={cy - BPx / 2} width={LPx} height={BPx}
                 fill="#94a3b8" fillOpacity={0.18} stroke="#94a3b8" strokeWidth={1.5} />
               {/* Steel grid lines */}
@@ -276,20 +377,20 @@ export default function DetailingPanel() {
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
-              ["L × B", `${L} × ${B} m`],
+              ["L Ã— B", `${L} Ã— ${B} m`],
               ["Depth h", `${h} mm`],
               ["Cover", `${cover} mm`],
-              ["As (L-dir)", AsL != null ? `${AsL} mm²/m` : "—"],
-              ["As (B-dir)", AsB != null ? `${AsB} mm²/m` : "—"],
+              ["As (L-dir)", AsL != null ? `${AsL} mmÂ²/m` : "â€”"],
+              ["As (B-dir)", AsB != null ? `${AsB} mmÂ²/m` : "â€”"],
             ]} />
           </div>
         </div>
       );
     }
 
-    // ─── Steel Beam ──────────────────────────────────────────
+    // â”€â”€â”€ Steel Beam â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function SteelBeamSchematic({ p }: { p: Record<string, unknown> }) {
       const span = (p.span_m as number) ?? 6;
@@ -300,26 +401,26 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Section Profile</p>
-            <svg viewBox="0 0 200 160" className="w-full max-w-[220px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Section Profile</p>
+            <svg viewBox="0 0 200 160" style={{ width: "100%", maxWidth: "220px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               {/* I-section */}
               <ISection cx={100} cy={80} fw={70} fh={10} wh={60} wt={8} />
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
               ["Span", `${span} m`],
-              ["Section class", secClass ?? "—"],
-              ["Mc,Rd", moment.Mc_kNm != null ? `${moment.Mc_kNm} kN·m` : "—"],
-              ["Pv", shear.Pv_kN != null ? `${shear.Pv_kN} kN` : "—"],
+              ["Section class", secClass ?? "â€”"],
+              ["Mc,Rd", moment.Mc_kNm != null ? `${moment.Mc_kNm} kNÂ·m` : "â€”"],
+              ["Pv", shear.Pv_kN != null ? `${shear.Pv_kN} kN` : "â€”"],
             ]} />
           </div>
         </div>
       );
     }
 
-    // ─── Steel Column ────────────────────────────────────────
+    // â”€â”€â”€ Steel Column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function SteelColumnSchematic({ p }: { p: Record<string, unknown> }) {
       const ley = (p.le_y_m as number) ?? 3;
@@ -331,18 +432,18 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Section Profile</p>
-            <svg viewBox="0 0 200 160" className="w-full max-w-[200px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Section Profile</p>
+            <svg viewBox="0 0 200 160" style={{ width: "100%", maxWidth: "200px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               <ISection cx={100} cy={80} fw={70} fh={10} wh={60} wt={8} />
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
               ["le,y", `${ley} m`],
               ["le,z", `${lez} m`],
-              ["py", `${py} N/mm²`],
-              ["pc", `${pc} N/mm²`],
+              ["py", `${py} N/mmÂ²`],
+              ["pc", `${pc} N/mmÂ²`],
               ["Pc", `${Pc} kN`],
             ]} />
           </div>
@@ -350,7 +451,7 @@ export default function DetailingPanel() {
       );
     }
 
-    // ─── Portal Frame ────────────────────────────────────────
+    // â”€â”€â”€ Portal Frame â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function PortalFrameSchematic({ p }: { p: Record<string, unknown> }) {
       const span = (p.span_m as number) ?? 20;
@@ -374,8 +475,8 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Frame Elevation</p>
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[260px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Frame Elevation</p>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: "260px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               {/* Ground */}
               <line x1={ox - 15} y1={groundY} x2={ox + spanPx + 15} y2={groundY} stroke="#64748b" strokeWidth={1.5} />
               {/* Columns */}
@@ -402,19 +503,19 @@ export default function DetailingPanel() {
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={[
               ["Span", `${span} m`],
               ["Eaves height", `${height} m`],
               ["Base type", baseType],
-              ["M,eaves", `${Meaves} kN·m`],
+              ["M,eaves", `${Meaves} kNÂ·m`],
             ]} />
           </div>
         </div>
       );
     }
 
-    // ─── Steel Truss ─────────────────────────────────────────
+    // â”€â”€â”€ Steel Truss â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function TrussSchematic({ p }: { p: Record<string, unknown> }) {
       const span = (p.span_m as number) ?? 10;
@@ -429,8 +530,8 @@ export default function DetailingPanel() {
       return (
         <div className="mb-6 flex gap-6 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Truss Elevation (Pratt)</p>
-            <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full max-w-[260px] border border-border rounded-lg bg-surface-card">
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Truss Elevation (Pratt)</p>
+            <svg viewBox={`0 0 ${W} ${H + 20}`} style={{ width: "100%", maxWidth: "260px", border: "1px solid var(--bdr)", borderRadius: 8, background: "#fff" }}>
               {/* Top chord */}
               <line x1={ox} y1={topY} x2={ox + panelW * panels} y2={topY} stroke="#6366f1" strokeWidth={2.5} />
               {/* Bottom chord */}
@@ -449,7 +550,7 @@ export default function DetailingPanel() {
             </svg>
           </div>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Key Data</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Key Data</p>
             <KeyValueList rows={Object.entries(p)
               .filter(([k]) => k !== "element")
               .map(([k, v]) => [k.replace(/_/g, " "), String(v)] as [string, string])} />
@@ -458,21 +559,21 @@ export default function DetailingPanel() {
       );
     }
 
-    // ─── Generic fallback ────────────────────────────────────
+    // â”€â”€â”€ Generic fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function GenericSchematic({ p }: { p: Record<string, unknown> }) {
       return (
         <div className="mb-6">
-          <p className="text-xs text-text-muted uppercase tracking-wide mb-2 font-semibold">Detailing Data</p>
+          <p style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>Detailing Data</p>
           <KeyValueList rows={Object.entries(p).map(([k, v]) => [
             k.replace(/_/g, " "),
-            typeof v === "object" ? JSON.stringify(v) : String(v ?? "—"),
+            typeof v === "object" ? JSON.stringify(v) : String(v ?? "â€”"),
           ] as [string, string])} />
         </div>
       );
     }
 
-    // ─── Shared helpers ───────────────────────────────────────
+    // â”€â”€â”€ Shared helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function ISection({
       cx, cy, fw, fh, wh, wt,
@@ -492,13 +593,14 @@ export default function DetailingPanel() {
 
     function KeyValueList({ rows }: { rows: [string, string][] }) {
       return (
-        <div className="rounded border border-border overflow-hidden divide-y divide-border">
-          {rows.map(([k, v]) => (
-            <div key={k} className="flex items-baseline px-3 py-1.5 gap-3 bg-surface-card">
-              <span className="text-xs text-text-muted flex-shrink-0 capitalize" style={{ minWidth: "8rem" }}>{k}</span>
-              <span className="text-sm text-text font-medium">{v}</span>
+        <div style={{ border: "1px solid var(--bdr)", borderRadius: 8, overflow: "hidden" }}>
+          {rows.map(([k, v], i) => (
+            <div key={k} style={{ display: "flex", alignItems: "baseline", padding: "6px 12px", gap: 12, background: i % 2 === 0 ? "#fff" : "var(--bg2)", borderBottom: i < rows.length - 1 ? "1px solid var(--bdr)" : "none" }}>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", minWidth: "8rem", flexShrink: 0, textTransform: "capitalize" }}>{k}</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--txt)", fontWeight: 600 }}>{v}</span>
             </div>
           ))}
         </div>
       );
     }
+

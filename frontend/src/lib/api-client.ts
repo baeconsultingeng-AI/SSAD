@@ -50,10 +50,28 @@ async function fetchJson<T>(
 export async function runCalc(
   request: CalcRequest
 ): Promise<CalcApiResponse> {
-  return fetchJson<CalcApiResponse>("/api/v1/calc", {
+  const mergedHeaders = new Headers();
+  mergedHeaders.set("Content-Type", "application/json");
+  if (API_AUTH_KEY) mergedHeaders.set("X-API-Key", API_AUTH_KEY);
+
+  const res = await fetch(`${BASE_URL}/api/v1/calc`, {
     method: "POST",
+    headers: mergedHeaders,
     body: JSON.stringify(request),
   });
+
+  const data = await res.json() as CalcApiResponse;
+  // Return the response body as a value for both 200 (ok) and 400 (calc error).
+  // Only throw for unexpected HTTP errors (401, 500, network issues, etc.)
+  if (res.ok || res.status === 400) {
+    return data;
+  }
+  const body = data as unknown as Record<string, any>;
+  const message =
+    typeof body === "object" && body !== null && "error" in body
+      ? String(body.error?.message ?? `Request failed (${res.status})`)
+      : `Request failed (${res.status})`;
+  throw new ApiError(message, res.status, data);
 }
 
 // ─── Project runs list ────────────────────────────────────

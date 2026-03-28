@@ -6,6 +6,7 @@ import type {
   CalcResponse,
   ExtractedParams,
 } from "@/types/calc";
+import type { ProjectInfo } from "@/lib/calc-storage";
 
 // ─── State shape ─────────────────────────────────────────
 
@@ -21,6 +22,10 @@ export interface WorkspaceState {
   projectId: string | null;
   /** Active element id */
   elementId: string | null;
+  /** Project info for the currently displayed report */
+  reportProjectInfo: ProjectInfo | null;
+  /** Unique reference ID for the currently designed element */
+  designElementId: string | null;
 }
 
 export interface ChatMessage {
@@ -37,8 +42,12 @@ interface WorkspaceContextValue extends WorkspaceState {
   addMessage: (msg: Omit<ChatMessage, "id" | "timestamp">) => void;
   setExtractedParams: (params: ExtractedParams | null) => void;
   setCalcResult: (result: CalcResponse | null) => void;
-  setActiveProject: (projectId: string, elementId?: string) => void;
+  setActiveProject: (projectId: string | null, elementId?: string) => void;
+  setReportProjectInfo: (info: ProjectInfo | null) => void;
+  setDesignElementId: (id: string | null) => void;
   resetWorkflow: () => void;
+  clearChat: () => void;
+  popMessage: () => void;
 }
 
 // ─── Context ──────────────────────────────────────────────
@@ -52,6 +61,8 @@ const INITIAL_STATE: WorkspaceState = {
   calcResult: null,
   projectId: null,
   elementId: null,
+  reportProjectInfo: null,
+  designElementId: null,
 };
 
 export function WorkspaceProvider({
@@ -94,7 +105,7 @@ export function WorkspaceProvider({
   }, []);
 
   const setActiveProject = useCallback(
-    (projectId: string, elementId?: string) => {
+    (projectId: string | null, elementId?: string) => {
       setState((s) => ({
         ...s,
         projectId,
@@ -113,6 +124,22 @@ export function WorkspaceProvider({
     }));
   }, []);
 
+  const setReportProjectInfo = useCallback((info: ProjectInfo | null) => {
+    setState((s) => ({ ...s, reportProjectInfo: info }));
+  }, []);
+
+  const setDesignElementId = useCallback((id: string | null) => {
+    setState((s) => ({ ...s, designElementId: id }));
+  }, []);
+
+  const clearChat = useCallback(() => {
+    setState((s) => ({ ...s, messages: [], extractedParams: null, calcResult: null, reportProjectInfo: null, designElementId: null }));
+  }, []);
+
+  const popMessage = useCallback(() => {
+    setState((s) => ({ ...s, messages: s.messages.slice(0, -1) }));
+  }, []);
+
   return (
     <WorkspaceContext.Provider
       value={{
@@ -122,7 +149,11 @@ export function WorkspaceProvider({
         setExtractedParams,
         setCalcResult,
         setActiveProject,
+        setReportProjectInfo,
+        setDesignElementId,
         resetWorkflow,
+        clearChat,
+        popMessage,
       }}
     >
       {children}

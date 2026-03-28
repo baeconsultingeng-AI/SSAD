@@ -29,6 +29,8 @@ This sheet is the live execution checklist for final promotion:
 - [ ] Backend tests passed (latest run)
 - [ ] Frontend type-check passed
 - [ ] Frontend build passed
+- [ ] Local backend health check passed (http://127.0.0.1:5000/health)
+- [ ] Local UI acceptance flow passed (workspace -> result -> report -> detailing -> projects replay)
 - [ ] Production backup/snapshot created in Supabase
 - [ ] GitHub environments configured: staging, production
 - [ ] Required GitHub secrets configured
@@ -36,7 +38,47 @@ This sheet is the live execution checklist for final promotion:
 Evidence links:
 - Backend tests:
 - Frontend checks:
+- Local health result:
+- Local UI smoke notes:
 - Backup proof:
+
+## Local Preview Execution (Mandatory)
+
+Run these commands first and only proceed when all checks pass.
+
+### Terminal 1 - Backend
+
+```bash
+cd backend
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe -m pip install -r requirements.txt
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe app.py
+```
+
+### Terminal 2 - Frontend
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+### Optional local API smoke
+
+```bash
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url http://127.0.0.1:5000 --project-id <existing-project-uuid> --api-key <optional-api-key>
+```
+
+- [ ] Local backend process started successfully
+- [ ] Local frontend process started successfully
+- [ ] Local /health returned status ok
+- [ ] Local end-to-end UI flow passed
+- [ ] Local API smoke passed (if executed)
+
+Local execution evidence:
+- Local backend startup log summary:
+- Local frontend startup log summary:
+- Local /health response:
+- Local smoke summary:
 
 ## OPS-005: Supabase Production Verification
 
@@ -93,7 +135,7 @@ Commands:
 gh workflow run ci.yml -f deploy_staging=true -f deploy_production=false
 gh run list --workflow ci.yml --limit 5
 gh run watch
-python qa/tests/smoke/api_flow_smoke.py --base-url <staging-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url <staging-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
 ```
 
 - [ ] Manual staging workflow dispatched
@@ -108,6 +150,21 @@ Staging evidence:
 - Smoke test notes:
 - API smoke script output:
 
+## Cloudflare Cutover Checklist (Between Staging and Production)
+
+- [ ] DNS record for app host points to production frontend target
+- [ ] DNS record for api host points to production backend target
+- [ ] SSL/TLS mode set to Full (strict)
+- [ ] API routes are not aggressively cached
+- [ ] WAF/firewall rules allow GET, POST, OPTIONS for required routes
+- [ ] CORS verified through Cloudflare proxy
+
+Cloudflare evidence:
+- App hostname:
+- API hostname:
+- SSL mode screenshot/log:
+- Cache/WAF notes:
+
 ## OPS-009: Production Deployment Execution
 
 Commands:
@@ -116,7 +173,7 @@ Commands:
 gh workflow run ci.yml -f deploy_staging=false -f deploy_production=true
 gh run list --workflow ci.yml --limit 5
 gh run watch
-python qa/tests/smoke/api_flow_smoke.py --base-url <production-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
+C:/Users/MacBook/AppData/Local/Programs/Python/Python312/python.exe qa/tests/smoke/api_flow_smoke.py --base-url <production-api-url> --project-id <existing-project-uuid> --api-key <optional-api-key>
 ```
 
 - [ ] Manual production workflow dispatched

@@ -10,13 +10,17 @@ export interface AuthUser {
   email: string;
   fullName: string;
   tier: UserTier;
+  trialExpiresAt?: string;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  effectiveTier: UserTier;
   login: (email: string, password: string) => Promise<void>;
+  loginLocal: (user: AuthUser) => void;
+  loginAsGuest: () => void;
   logout: () => void;
 }
 
@@ -50,10 +54,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const loginLocal = useCallback((u: AuthUser) => {
+    localStorage.setItem("ssad_user", JSON.stringify(u));
+    setUser(u);
+  }, []);
+
+  const loginAsGuest = useCallback(() => {
+    // Guest users are session-only — not persisted to localStorage
+    setUser({ id: "guest", email: "", fullName: "Guest", tier: "guest" });
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("ssad_user");
     setUser(null);
   }, []);
+
+  const effectiveTier: UserTier =
+    user?.tier === "trial" && user.trialExpiresAt && new Date() > new Date(user.trialExpiresAt)
+      ? "guest"
+      : (user?.tier ?? "guest");
 
   return (
     <AuthContext.Provider
@@ -61,7 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        effectiveTier,
         login,
+        loginLocal,
+        loginAsGuest,
         logout,
       }}
     >

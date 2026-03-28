@@ -1,12 +1,16 @@
-"use client";
+const fs = require('fs');
+const path = require('path');
+
+const target = path.join(__dirname, 'frontend/src/components/auth/AuthScreen.tsx');
+
+const content = `"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 
 type Modal = "login" | "register" | null;
 
-// ─── Animated canvas: neural net + ephemeral mini frames ───
-// ─── 3-D isometric 6-storey frame + neural net ────────────
+// ─── Animated canvas: neural net + structural frame ────────
 function HeroCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -17,83 +21,41 @@ function HeroCanvas() {
     if (!ctx) return;
 
     let raf: number;
-    let frame = 0;
+    let t = 0;
 
-    // ── Isometric projection helpers ──
-    // 3-D grid: cols along X, bays along Z, storeys along Y (up)
-    const COLS = 3;   // columns in X direction (0..2)
-    const BAYS = 2;   // bays in Z direction  (0..1)
-    const STOREYS = 6;
+    // Frame nodes — a simple portal frame skeleton
+    const frameNodes = [
+      { x: 0.18, y: 0.82 }, // col base L
+      { x: 0.18, y: 0.35 }, // col top L
+      { x: 0.82, y: 0.35 }, // col top R
+      { x: 0.82, y: 0.82 }, // col base R
+      { x: 0.18, y: 0.35 }, // beam L (same as top L)
+      { x: 0.50, y: 0.25 }, // beam mid (apex)
+      { x: 0.82, y: 0.35 }, // beam R
+    ];
+    const frameEdges = [[0,1],[2,3],[1,2],[4,5],[5,6]];
 
-    // iso angles: 30° for classic iso
-    const ISO_AX = Math.cos(Math.PI / 6);
-    const ISO_AY = Math.sin(Math.PI / 6);
-
-    // project 3-D (gx, gy_up, gz) → canvas (cx, cy) normalised 0-1
-    // origin sits at bottom-centre of the building
-    function iso(gx: number, gy: number, gz: number, W: number, H: number) {
-      // scale so full 6-storey building fits nicely
-      const scaleX = W * 0.088;
-      const scaleY = H * 0.072;
-      // iso projection
-      const cx = 0.5 * W + (gx - gz) * ISO_AX * scaleX;
-      const cy = 0.72 * H - gy * scaleY - (gx + gz) * ISO_AY * scaleX * 0.5;
-      return { cx, cy };
-    }
-
-    // ── Build node list ──
-    // Each node: { gx, gy, gz } in grid units
-    type Node3 = { gx: number; gy: number; gz: number };
-    const nodes: Node3[] = [];
-    for (let gz = 0; gz <= BAYS; gz++)
-      for (let gx = 0; gx <= COLS; gx++)
-        for (let gy = 0; gy <= STOREYS; gy++)
-          nodes.push({ gx, gy, gz });
-
-    const nodeIndex = (gx: number, gy: number, gz: number) =>
-      gz * (COLS + 1) * (STOREYS + 1) + gx * (STOREYS + 1) + gy;
-
-    // ── Build edge list (columns + beams) ──
-    type Edge = { a: number; b: number; kind: "col" | "beamX" | "beamZ" };
-    const edges: Edge[] = [];
-    for (let gz = 0; gz <= BAYS; gz++) {
-      for (let gx = 0; gx <= COLS; gx++) {
-        for (let gy = 0; gy < STOREYS; gy++) {
-          // vertical column
-          edges.push({ a: nodeIndex(gx, gy, gz), b: nodeIndex(gx, gy + 1, gz), kind: "col" });
-        }
-      }
-    }
-    for (let gz = 0; gz <= BAYS; gz++) {
-      for (let gx = 0; gx < COLS; gx++) {
-        for (let gy = 1; gy <= STOREYS; gy++) {
-          // beam along X
-          edges.push({ a: nodeIndex(gx, gy, gz), b: nodeIndex(gx + 1, gy, gz), kind: "beamX" });
-        }
-      }
-    }
-    for (let gz = 0; gz < BAYS; gz++) {
-      for (let gx = 0; gx <= COLS; gx++) {
-        for (let gy = 1; gy <= STOREYS; gy++) {
-          // beam along Z
-          edges.push({ a: nodeIndex(gx, gy, gz), b: nodeIndex(gx, gy, gz + 1), kind: "beamZ" });
-        }
-      }
-    }
-
-    // slow rotation angle
-    let rotAngle = 0;
-
-    // ── Neurons ──────────────────────────────────────────
+    // Neural nodes — scattered cloud
     const N = 22;
-    type Neuron = { x: number; y: number; vx: number; vy: number; phase: number };
-    const neurons: Neuron[] = Array.from({ length: N }, () => ({
-      x: 0.08 + Math.random() * 0.84,
-      y: 0.08 + Math.random() * 0.84,
-      vx: (Math.random() - 0.5) * 0.00032,
-      vy: (Math.random() - 0.5) * 0.00032,
-      phase: Math.random() * Math.PI * 2,
-    }));
+    const neurons: { x: number; y: number; vx: number; vy: number; phase: number }[] = [];
+    for (let i = 0; i < N; i++) {
+      neurons.push({
+        x: 0.1 + Math.random() * 0.8,
+        y: 0.1 + Math.random() * 0.8,
+        vx: (Math.random() - 0.5) * 0.0004,
+        vy: (Math.random() - 0.5) * 0.0004,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    // Neural connections (nearest pairs)
+    const synapses: [number, number][] = [];
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = neurons[i].x - neurons[j].x;
+        const dy = neurons[i].y - neurons[j].y;
+        if (Math.sqrt(dx * dx + dy * dy) < 0.22) synapses.push([i, j]);
+      }
+    }
 
     function resize() {
       if (!canvas) return;
@@ -107,93 +69,87 @@ function HeroCanvas() {
       if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
       ctx.clearRect(0, 0, W, H);
-      frame++;
-      rotAngle += 0.003; // gentle slow spin
+      t += 0.008;
 
-      // ── Projected nodes with rotation around Y axis ──
-      const projected = nodes.map(({ gx, gy, gz }) => {
-        // centre the grid
-        const cx3 = gx - COLS / 2;
-        const cz3 = gz - BAYS / 2;
-        // rotate around Y
-        const rx = cx3 * Math.cos(rotAngle) - cz3 * Math.sin(rotAngle);
-        const rz = cx3 * Math.sin(rotAngle) + cz3 * Math.cos(rotAngle);
-        return iso(rx, gy, rz, W, H);
-      });
-
-      // ── Draw edges ──
-      edges.forEach(({ a, b, kind }) => {
-        const pa = projected[a], pb = projected[b];
-        // depth sort approximation: average Y screen coord (higher = further back → draw first)
-        const isCol = kind === "col";
-        ctx.beginPath();
-        ctx.moveTo(pa.cx, pa.cy);
-        ctx.lineTo(pb.cx, pb.cy);
-        if (isCol) {
-          ctx.strokeStyle = "rgba(140,210,255,0.26)";
-          ctx.lineWidth = 1.0;
-        } else if (kind === "beamX") {
-          ctx.strokeStyle = "rgba(140,210,255,0.26)";
-          ctx.lineWidth = 1.0;
-        } else {
-          ctx.strokeStyle = "rgba(140,210,255,0.18)";
-          ctx.lineWidth = 0.8;
-        }
-        ctx.stroke();
-      });
-
-      // ── Draw joint nodes ──
-      nodes.forEach((n, i) => {
-        if (n.gy === 0) return; // skip base slab nodes
-        const p = projected[i];
-        const pulse = 0.35 + 0.25 * Math.sin(frame * 0.02 + n.gx + n.gz);
-        ctx.beginPath();
-        ctx.arc(p.cx, p.cy, 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(160,220,255,${pulse})`;
-        ctx.fill();
-      });
-
-      // ── Neural net ──
+      // Move neurons
       neurons.forEach(n => {
         n.x += n.vx; n.y += n.vy;
         if (n.x < 0.05 || n.x > 0.95) n.vx *= -1;
         if (n.y < 0.05 || n.y > 0.95) n.vy *= -1;
       });
 
-      // synaptic links
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const dx = neurons[i].x - neurons[j].x;
-          const dy = neurons[i].y - neurons[j].y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < 0.18) {
-            ctx.beginPath();
-            ctx.moveTo(neurons[i].x * W, neurons[i].y * H);
-            ctx.lineTo(neurons[j].x * W, neurons[j].y * H);
-            ctx.strokeStyle = `rgba(200,150,12,${(1 - d / 0.18) * 0.18})`;
-            ctx.lineWidth = 0.6;
-            ctx.stroke();
-          }
-        }
-      }
-
-      // neuron dots
-      neurons.forEach(n => {
-        const t = frame * 0.012;
-        const glow = 0.4 + 0.3 * Math.sin(t * 2.2 + n.phase);
-        const r = (1.6 + 0.8 * Math.sin(t * 1.6 + n.phase)) * (W / 900);
-        const grad = ctx.createRadialGradient(n.x * W, n.y * H, 0, n.x * W, n.y * H, r * 7);
-        grad.addColorStop(0, `rgba(200,150,12,${glow * 0.45})`);
-        grad.addColorStop(1, "rgba(200,150,12,0)");
+      // Draw synapses (neural links) — gold faint
+      synapses.forEach(([a, b]) => {
+        const pulse = 0.18 + 0.12 * Math.sin(t * 1.8 + neurons[a].phase);
         ctx.beginPath();
-        ctx.arc(n.x * W, n.y * H, r * 7, 0, Math.PI * 2);
+        ctx.moveTo(neurons[a].x * W, neurons[a].y * H);
+        ctx.lineTo(neurons[b].x * W, neurons[b].y * H);
+        ctx.strokeStyle = \`rgba(200,150,12,\${pulse})\`;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      });
+
+      // Draw neural nodes
+      neurons.forEach((n, i) => {
+        const glow = 0.55 + 0.45 * Math.sin(t * 2.2 + n.phase);
+        const r = (2.2 + 1.2 * Math.sin(t * 1.6 + n.phase)) * (W / 900);
+        const grad = ctx.createRadialGradient(n.x * W, n.y * H, 0, n.x * W, n.y * H, r * 6);
+        grad.addColorStop(0, \`rgba(200,150,12,\${glow * 0.9})\`);
+        grad.addColorStop(1, \`rgba(200,150,12,0)\`);
+        ctx.beginPath();
+        ctx.arc(n.x * W, n.y * H, r * 6, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
         ctx.beginPath();
         ctx.arc(n.x * W, n.y * H, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(220,170,30,${glow})`;
+        ctx.fillStyle = \`rgba(220,170,30,\${glow})\`;
         ctx.fill();
       });
+
+      // Draw structural frame — bright blue/white
+      const frameAlpha = 0.55 + 0.1 * Math.sin(t * 0.7);
+      frameEdges.forEach(([a, b]) => {
+        ctx.beginPath();
+        ctx.moveTo(frameNodes[a].x * W, frameNodes[a].y * H);
+        ctx.lineTo(frameNodes[b].x * W, frameNodes[b].y * H);
+        ctx.strokeStyle = \`rgba(100,180,255,\${frameAlpha})\`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      });
+
+      // Frame node circles — show joint pins
+      [0,1,2,3,5].forEach(i => {
+        const glow = 0.7 + 0.3 * Math.sin(t * 1.4 + i);
+        ctx.beginPath();
+        ctx.arc(frameNodes[i].x * W, frameNodes[i].y * H, 5, 0, Math.PI * 2);
+        ctx.fillStyle = \`rgba(120,200,255,\${glow})\`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(frameNodes[i].x * W, frameNodes[i].y * H, 9, 0, Math.PI * 2);
+        ctx.strokeStyle = \`rgba(100,180,255,\${glow * 0.4})\`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      // Travelling signal along frame edges — a dot that traverses the frame
+      const edgeCount = frameEdges.length;
+      const totalT = (t * 0.6) % edgeCount;
+      const edgeIdx = Math.floor(totalT);
+      const frac = totalT - edgeIdx;
+      const edge = frameEdges[edgeIdx % edgeCount];
+      const sx = (frameNodes[edge[0]].x + (frameNodes[edge[1]].x - frameNodes[edge[0]].x) * frac) * W;
+      const sy = (frameNodes[edge[0]].y + (frameNodes[edge[1]].y - frameNodes[edge[0]].y) * frac) * H;
+      const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 14);
+      sg.addColorStop(0, "rgba(255,220,80,0.95)");
+      sg.addColorStop(1, "rgba(255,180,0,0)");
+      ctx.beginPath();
+      ctx.arc(sx, sy, 14, 0, Math.PI * 2);
+      ctx.fillStyle = sg;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,240,120,1)";
+      ctx.fill();
 
       raf = requestAnimationFrame(draw);
     }
@@ -208,7 +164,7 @@ function HeroCanvas() {
   return (
     <canvas
       ref={canvasRef}
-      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.72 }}
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.7 }}
     />
   );
 }
@@ -266,7 +222,7 @@ function AuthInput({ id, type = "text", placeholder, label, value, onChange, req
         autoComplete={type === "email" ? "email" : type === "password" ? "current-password" : "off"}
         style={{
           width: "100%", padding: "10px 12px",
-          border: `1.5px solid ${focused ? "#1a4a8a" : "#ddd8cf"}`,
+          border: \`1.5px solid \${focused ? "#1a4a8a" : "#ddd8cf"}\`,
           borderRadius: 10, fontFamily: "var(--ui)", fontSize: 13, color: "#1a1410",
           background: focused ? "#f0f4fb" : "#f9f7f4",
           boxSizing: "border-box", outline: "none", transition: "all .15s",
@@ -284,7 +240,7 @@ function TierRow({ icon, label, items, highlight = false }: {
     <div style={{
       borderRadius: 10, padding: "9px 12px", marginBottom: 6,
       background: highlight ? "rgba(26,74,138,.07)" : "rgba(0,0,0,.03)",
-      border: `1px solid ${highlight ? "rgba(26,74,138,.25)" : "#e8e3db"}`,
+      border: \`1px solid \${highlight ? "rgba(26,74,138,.25)" : "#e8e3db"}\`,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
         <span style={{ fontSize: 14 }}>{icon}</span>
@@ -327,7 +283,7 @@ export default function AuthScreen() {
       await login(loginEmail.trim(), "");
     } catch {
       const mockUser = {
-        id: `u_${Date.now()}`, email: loginEmail.trim(), fullName: "",
+        id: \`u_\${Date.now()}\`, email: loginEmail.trim(), fullName: "",
         tier: "trial" as const,
         trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       };
@@ -346,7 +302,7 @@ export default function AuthScreen() {
     setRegLoading(true);
     setTimeout(() => {
       loginLocal({
-        id: `u_${Date.now()}`, email: regEmail.trim(), fullName: regName.trim(),
+        id: \`u_\${Date.now()}\`, email: regEmail.trim(), fullName: regName.trim(),
         tier: "trial" as const,
         trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
@@ -357,15 +313,15 @@ export default function AuthScreen() {
   return (
     <>
       {/* ── Keyframes ── */}
-      <style>{`
+      <style>{\`
         @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
         @keyframes slideUp { from { opacity:0; transform:translateY(28px) } to { opacity:1; transform:translateY(0) } }
         @keyframes titleIn { from { opacity:0; transform:translateY(-18px) } to { opacity:1; transform:translateY(0) } }
         @keyframes btnIn { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
-        .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,.45) !important; background: rgba(200,150,12,.18) !important; border-color: rgba(200,150,12,.7) !important; }
+        .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,0,0,.45) !important; }
         .auth-btn:active { transform: scale(.97); }
         .auth-guest-btn:hover { background: rgba(200,150,12,.18) !important; border-color: rgba(200,150,12,.7) !important; }
-      `}</style>
+      \`}</style>
 
       {/* ── Full-screen stage ── */}
       <div style={{
@@ -385,61 +341,30 @@ export default function AuthScreen() {
 
           {/* Logo */}
           <div style={{ textAlign: "center", marginBottom: 36, animation: "titleIn .6s ease both" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 10 }}>
               <div style={{
                 width: 52, height: 52, borderRadius: 15,
                 background: "rgba(200,150,12,.15)", border: "1.5px solid rgba(200,150,12,.55)",
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
                 boxShadow: "0 0 32px rgba(200,150,12,.25)",
               }}>
-                <svg viewBox="0 0 40 40" fill="none" width="32" height="32">
-                  {/* Isometric portal frame — floor plane */}
-                  <line x1="20" y1="36" x2="8" y2="30" stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeLinecap="round"/>
-                  <line x1="20" y1="36" x2="32" y2="30" stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeLinecap="round"/>
-                  {/* Back column (depth hint) */}
-                  <line x1="20" y1="36" x2="20" y2="26" stroke="rgba(255,255,255,0.18)" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 2"/>
-                  {/* Left column */}
-                  <line x1="8" y1="30" x2="8" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                  {/* Right column */}
-                  <line x1="32" y1="30" x2="32" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                  {/* Top beam — front */}
-                  <line x1="8" y1="12" x2="32" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                  {/* Depth edges at top */}
-                  <line x1="8" y1="12" x2="20" y2="6" stroke="rgba(255,255,255,0.55)" strokeWidth="1.4" strokeLinecap="round"/>
-                  <line x1="32" y1="12" x2="20" y2="6" stroke="rgba(255,255,255,0.55)" strokeWidth="1.4" strokeLinecap="round"/>
-                  {/* Back column top */}
-                  <line x1="20" y1="26" x2="20" y2="6" stroke="rgba(255,255,255,0.28)" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="2 2"/>
-                  {/* Bending moment diagram on front beam */}
-                  <line x1="8" y1="19" x2="16" y2="17.2" stroke="rgba(200,150,12,0.7)" strokeWidth="0.9"/>
-                  <line x1="16" y1="17.2" x2="24" y2="17.2" stroke="rgba(255,255,255,0.5)" strokeWidth="0.9"/>
-                  <line x1="24" y1="17.2" x2="32" y2="19" stroke="rgba(200,150,12,0.7)" strokeWidth="0.9"/>
-                  {/* Nodes */}
-                  <circle cx="8" cy="12" r="2.2" fill="rgba(200,150,12,0.4)" stroke="#c8960c" strokeWidth="1.2"/>
-                  <circle cx="32" cy="12" r="2.2" fill="rgba(200,150,12,0.4)" stroke="#c8960c" strokeWidth="1.2"/>
-                  <circle cx="8" cy="19" r="2" fill="rgba(200,150,12,0.3)" stroke="#c8960c" strokeWidth="1"/>
-                  <circle cx="16" cy="17.2" r="2" fill="rgba(200,150,12,0.2)" stroke="#c8960c" strokeWidth="0.9"/>
-                  <circle cx="24" cy="17.2" r="2" fill="rgba(200,150,12,0.2)" stroke="#c8960c" strokeWidth="0.9"/>
-                  <circle cx="32" cy="19" r="2" fill="rgba(200,150,12,0.3)" stroke="#c8960c" strokeWidth="1"/>
-                  {/* Iso top apex */}
-                  <circle cx="20" cy="6" r="2" fill="rgba(200,150,12,0.35)" stroke="#c8960c" strokeWidth="1"/>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <line x1="5" y1="20" x2="5" y2="7" stroke="#c8960c" strokeWidth="2.2" strokeLinecap="round"/>
+                  <line x1="19" y1="20" x2="19" y2="3" stroke="#c8960c" strokeWidth="2.2" strokeLinecap="round"/>
+                  <line x1="5" y1="11" x2="19" y2="11" stroke="rgba(200,150,12,.5)" strokeWidth="1.8" strokeLinecap="round"/>
+                  <line x1="5" y1="20" x2="19" y2="20" stroke="rgba(200,150,12,.5)" strokeWidth="1.8" strokeLinecap="round"/>
                 </svg>
               </div>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontFamily: "var(--ser)", fontSize: 34, fontWeight: 900, color: "#fff", letterSpacing: "-1px", lineHeight: 1, textShadow: "1px 1px 0 #9a7200, 2px 2px 0 #7a5800, 3px 3px 0 #5e4300, 4px 4px 0 #3d2c00, 5px 5px 0 #1e1600, 6px 6px 10px rgba(0,0,0,.65)" }}>
-                  SSAD
-                </div>
-                <div style={{ fontFamily: "var(--ser)", fontSize: 12, color: "rgba(200,150,12,.85)", fontStyle: "italic", marginTop: 4 }}>
-                  <em>Smart Structural Analysis &amp; Design</em>
-                </div>
+              <div style={{ fontFamily: "var(--ser)", fontSize: 34, fontWeight: 900, color: "#fff", letterSpacing: "-1px", textShadow: "0 2px 20px rgba(200,150,12,.3)" }}>
+                SSAD
               </div>
             </div>
-          </div>
-
-          {/* ── Tagline ── */}
-          <div style={{ textAlign: "center", marginBottom: 28, marginTop: -8, animation: "titleIn .7s .1s ease both", padding: "0 8px" }}>
-            <span style={{ fontFamily: "var(--ser)", fontSize: 15, fontStyle: "italic", fontWeight: 500, color: "rgba(255,255,255,.7)", letterSpacing: ".15px", lineHeight: 1.5 }}>
-              From prompt to calculation — structural engineering, reimagined.
-            </span>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "rgba(200,150,12,.8)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 4 }}>
+              Smart Structural Analysis &amp; Design
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "rgba(255,255,255,.3)", letterSpacing: ".5px" }}>
+              AI · BS 8110 · BS 5950 · EC2
+            </div>
           </div>
 
           {/* ── Three action buttons ── always fixed ── */}
@@ -451,10 +376,10 @@ export default function AuthScreen() {
               onClick={() => setModal("login")}
               style={{
                 width: "100%", padding: "15px 20px",
-                background: "rgba(200,150,12,.1)", border: "1.5px solid rgba(26,74,138,.65)", borderRadius: 14,
+                background: "#1a4a8a", border: "none", borderRadius: 14,
                 color: "#fff", fontFamily: "var(--ui)", fontSize: 15, fontWeight: 700,
                 cursor: "pointer", transition: "all .2s",
-                boxShadow: "0 4px 20px rgba(26,74,138,.25), inset 0 1px 0 rgba(255,255,255,.08)",
+                boxShadow: "0 4px 20px rgba(26,74,138,.45), inset 0 1px 0 rgba(255,255,255,.12)",
                 letterSpacing: ".1px",
               }}
             >
@@ -467,10 +392,10 @@ export default function AuthScreen() {
               onClick={() => setModal("register")}
               style={{
                 width: "100%", padding: "15px 20px",
-                background: "rgba(200,150,12,.1)", border: "1.5px solid rgba(26,74,138,.65)", borderRadius: 14,
+                background: "linear-gradient(135deg,#0f3060,#1a5ca8)", border: "1px solid rgba(100,160,255,.3)", borderRadius: 14,
                 color: "#fff", fontFamily: "var(--ui)", fontSize: 15, fontWeight: 700,
                 cursor: "pointer", transition: "all .2s",
-                boxShadow: "0 4px 20px rgba(26,74,138,.25)",
+                boxShadow: "0 4px 20px rgba(10,30,80,.5)",
               }}
             >
               Register Free — 30-day Full Access
@@ -482,13 +407,13 @@ export default function AuthScreen() {
               onClick={() => loginAsGuest()}
               style={{
                 width: "100%", padding: "14px 20px",
-                background: "rgba(200,150,12,.1)", border: "1.5px solid rgba(26,74,138,.65)", borderRadius: 14,
-                color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 600,
+                background: "rgba(200,150,12,.1)", border: "1.5px solid rgba(200,150,12,.4)", borderRadius: 14,
+                color: "#c8960c", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 600,
                 cursor: "pointer", transition: "all .2s",
               }}
             >
               Continue as Guest
-              <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 9, color: "rgba(255,255,255,.55)", fontWeight: 400, marginTop: 2 }}>
+              <span style={{ display: "block", fontFamily: "var(--mono)", fontSize: 9, color: "rgba(200,150,12,.65)", fontWeight: 400, marginTop: 2 }}>
                 RC Beam design only · No sign-up required
               </span>
             </button>
@@ -502,20 +427,20 @@ export default function AuthScreen() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               {[
-                { tier: "Pro", color: "rgba(120,180,255,.85)", items: ["All elements", "Unlimited", "Reports"] },
-                { tier: "Free Trial", color: "rgba(100,200,150,.8)", items: ["All elements", "30 days"] },
                 { tier: "Guest", color: "rgba(200,150,12,.7)", items: ["RC Beam only"] },
+                { tier: "Free Trial", color: "rgba(100,200,150,.8)", items: ["All elements", "30 days"] },
+                { tier: "Pro", color: "rgba(120,180,255,.85)", items: ["All elements", "Unlimited", "Reports"] },
               ].map(t => (
                 <div key={t.tier} style={{ background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, padding: "8px 8px" }}>
-                  <div style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: t.color, marginBottom: 4 }}>{t.tier}</div>
-                  {t.items.map(i => <div key={i} style={{ fontFamily: "var(--mono)", fontSize: 9, color: "rgba(255,255,255,.45)" }}>{i}</div>)}
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: t.color, marginBottom: 4 }}>{t.tier}</div>
+                  {t.items.map(i => <div key={i} style={{ fontFamily: "var(--mono)", fontSize: 8, color: "rgba(255,255,255,.45)" }}>{i}</div>)}
                 </div>
               ))}
             </div>
           </div>
 
-          <div style={{ marginTop: 24, fontFamily: "var(--ser)", fontSize: 17, color: "rgba(200,150,12,.65)", letterSpacing: "0.5px", textAlign: "center", animation: "btnIn .7s .45s ease both", fontStyle: "italic", fontWeight: 600 }}>
-            Designed by Bae Consulting Engineers
+          <div style={{ marginTop: 24, fontFamily: "var(--mono)", fontSize: 8, color: "rgba(255,255,255,.2)", letterSpacing: ".5px", textAlign: "center", animation: "btnIn .7s .45s ease both" }}>
+            BAE CONSULTING ENGINEERS · CEng MIStructE
           </div>
         </div>
       </div>
@@ -544,13 +469,13 @@ export default function AuthScreen() {
             disabled={loginLoading}
             style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "#1a4a8a", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: loginLoading ? "not-allowed" : "pointer", opacity: loginLoading ? .7 : 1, transition: "opacity .2s", marginTop: 4 }}
           >
-            {loginLoading ? "Signing in…" : "Sign In →"}
+            {loginLoading ? "Signing in\u2026" : "Sign In \u2192"}
           </button>
 
           <div style={{ textAlign: "center", marginTop: 14, fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72" }}>
             No account?{" "}
             <span onClick={() => setModal("register")} style={{ color: "#1a4a8a", fontWeight: 700, cursor: "pointer" }}>
-              Register free →
+              Register free \u2192
             </span>
           </div>
         </Modal>
@@ -563,7 +488,7 @@ export default function AuthScreen() {
             <div>
               <div style={{ fontFamily: "var(--ser)", fontSize: 20, fontWeight: 700, color: "#1a1410" }}>Create free account</div>
               <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#007a5e", fontWeight: 700, marginTop: 3 }}>
-                ⚡ 30-day full access · No credit card
+                \u26a1 30-day full access \u00b7 No credit card
               </div>
             </div>
             <button onClick={() => setModal(null)} style={{ background: "rgba(0,0,0,.06)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: "#5c4f42" }}>✕</button>
@@ -579,7 +504,7 @@ export default function AuthScreen() {
             <label htmlFor="reg-role" style={{ display: "block", fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "#5c4f42", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 4 }}>Role *</label>
             <select id="reg-role" value={regRole} onChange={e => setRegRole(e.target.value)}
               style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #ddd8cf", borderRadius: 10, fontFamily: "var(--ui)", fontSize: 13, color: regRole ? "#1a1410" : "#8a7d72", background: "#f9f7f4", boxSizing: "border-box", appearance: "none" }}>
-              <option value="">Select your role…</option>
+              <option value="">Select your role\u2026</option>
               <option>Structural Engineer</option>
               <option>Civil Engineer</option>
               <option>Engineering Student</option>
@@ -610,7 +535,7 @@ export default function AuthScreen() {
             disabled={regLoading}
             style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "linear-gradient(135deg,#1a4a8a,#2563b0)", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: regLoading ? "not-allowed" : "pointer", opacity: regLoading ? .7 : 1 }}
           >
-            {regLoading ? "Creating account…" : "Start Free Trial →"}
+            {regLoading ? "Creating account\u2026" : "Start Free Trial \u2192"}
           </button>
 
           <div style={{ textAlign: "center", marginTop: 12, fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72" }}>
@@ -622,3 +547,7 @@ export default function AuthScreen() {
     </>
   );
 }
+`;
+
+fs.writeFileSync(target, content, 'utf8');
+console.log('Done. Size:', content.length, 'chars');
