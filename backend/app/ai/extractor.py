@@ -162,12 +162,26 @@ def extract_params(description: str) -> dict[str, Any]:
         def _fallback() -> dict[str, Any]:
             return _call_deepseek(description, model_env="AI_FALLBACK_1_MODEL")
 
+    def _primary_model() -> str:
+        default = "deepseek-chat" if primary == "deepseek" else "claude-sonnet-4-20250514"
+        return os.getenv("AI_PRIMARY_MODEL", default).strip() or default
+
+    def _fallback_model() -> str:
+        default = "claude-sonnet-4-20250514" if primary == "deepseek" else "deepseek-chat"
+        return os.getenv("AI_FALLBACK_1_MODEL", default).strip() or default
+
     try:
-        return _first()
+        data = _first()
+        data["_provider_used"] = first_name
+        data["_model_used"] = _primary_model()
+        return data
     except Exception as first_err:
         print(f"[AI] {first_name} failed ({first_err!r}); trying {fallback_name} fallback…")
         try:
-            return _fallback()
+            data = _fallback()
+            data["_provider_used"] = fallback_name
+            data["_model_used"] = _fallback_model()
+            return data
         except Exception as second_err:
             raise RuntimeError(
                 f"All AI providers failed. "

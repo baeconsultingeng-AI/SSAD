@@ -86,6 +86,18 @@ def create_app() -> Flask:
     def health():
         return jsonify({"status": "ok", "service": "ssad-calc-api-v1"})
 
+    # ── GET /api/v1/ai/status ─────────────────────────────────────────────────
+    @app.get("/api/v1/ai/status")
+    def ai_status():
+        primary = os.getenv("AI_PRIMARY_PROVIDER", "anthropic").strip().lower()
+        if primary == "deepseek":
+            provider = "DeepSeek"
+            model = os.getenv("AI_PRIMARY_MODEL", "deepseek-chat").strip() or "deepseek-chat"
+        else:
+            provider = "Claude"
+            model = os.getenv("AI_PRIMARY_MODEL", "claude-sonnet-4-20250514").strip() or "claude-sonnet-4-20250514"
+        return jsonify({"provider": provider, "model": model})
+
     # ── POST /api/v1/calc ─────────────────────────────────────────────────────
     @app.post("/api/v1/calc")
     def calc_v1():
@@ -250,6 +262,8 @@ def create_app() -> Flask:
                 "confidence":       result.get("confidence", "medium"),
                 "missing":          result.get("missing", []),
                 "param_confidence": result.get("param_confidence", {}),
+                "provider":         result.get("_provider_used", ""),
+                "model":            result.get("_model_used", ""),
             }), 200
         except ValueError as e:
             return jsonify({

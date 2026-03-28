@@ -146,8 +146,18 @@ export default function SteelChatPanel() {
   const recognitionRef = useRef<any>(null);
   const [isListening, setIsListening] = useState(false);
   const [redesignMode, setRedesignMode] = useState(false);
+  const [aiProvider, setAiProvider] = useState<string>("");
 
-  // Suppress eslint warning â€” effectiveTier used in future tier-locking
+  // Fetch which AI provider is active
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+    fetch(`${apiUrl}/api/v1/ai/status`)
+      .then(r => r.json())
+      .then((d: { provider?: string; model?: string }) => setAiProvider(d.provider ?? ""))
+      .catch(() => {});
+  }, []);
+
+  // Suppress eslint warning — effectiveTier used in future tier-locking
   void effectiveTier;
 
   // Chat history is preserved in WorkspaceContext — only cleared explicitly
@@ -240,7 +250,7 @@ export default function SteelChatPanel() {
       });
 
       if (res.ok) {
-        const data = await res.json() as { module: string; extracted: Record<string, unknown>; summary: string };
+        const data = await res.json() as { module: string; extracted: Record<string, unknown>; summary: string; provider?: string; model?: string };
         setExtractedParams({ ...data.extracted, module: data.module } as unknown as import("@/types/calc").ExtractedParams);
         setDesignElementId(generateElemId(data.module));
         addMessage({
@@ -251,6 +261,8 @@ export default function SteelChatPanel() {
             summary: data.summary ?? "Parameters extracted. Please confirm to proceed.",
             confidence: (data as Record<string, unknown>).confidence ?? "high",
             missing: (data as Record<string, unknown>).missing ?? [],
+            provider: data.provider ?? "",
+            model: data.model ?? "",
           })}`,
         });
         setPhase(3);
@@ -340,7 +352,14 @@ export default function SteelChatPanel() {
           </div>
           <div>
             <div style={{ fontFamily: "var(--ser)", fontSize: 14, fontWeight: 700, color: "var(--txt)", lineHeight: 1.2 }}>Steel Design Assistant</div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#16a34a", fontWeight: 600, marginTop: 2, letterSpacing: "0.4px" }}>â— Online</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#16a34a", fontWeight: 600, letterSpacing: "0.4px" }}>● Online</span>
+              {aiProvider && (
+                <span style={{ fontFamily: "var(--mono)", fontSize: 8, fontWeight: 700, color: aiProvider === "DeepSeek" ? "#2563eb" : "#7c3aed", background: aiProvider === "DeepSeek" ? "rgba(37,99,235,0.1)" : "rgba(124,58,237,0.1)", border: `1px solid ${aiProvider === "DeepSeek" ? "rgba(37,99,235,0.3)" : "rgba(124,58,237,0.3)"}`, borderRadius: 4, padding: "1px 5px", letterSpacing: "0.3px" }}>
+                  {aiProvider === "DeepSeek" ? "⚡" : "◆"} {aiProvider}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <button onClick={() => goScreen("workspace")} style={{ background: "rgba(200,150,12,.1)", border: "1px solid rgba(200,150,12,.35)", color: "var(--blu)", padding: "5px 10px", borderRadius: 8, fontFamily: "var(--mono)", fontSize: 9, cursor: "pointer", fontWeight: 700 }}>
@@ -782,10 +801,10 @@ function SteelExtractedCard({
   useEffect(() => { if (autoEdit) setEditMode(true); }, [autoEdit]);
   const [designCode, setDesignCode] = useState<string>(STEEL_CODE_LIST[0]!.id);
 
-  let envelope: { module?: string; extracted?: Record<string, unknown>; summary?: string; confidence?: string; missing?: string[]; param_confidence?: Record<string, number> } = {};
+  let envelope: { module?: string; extracted?: Record<string, unknown>; summary?: string; confidence?: string; missing?: string[]; param_confidence?: Record<string, number>; provider?: string; model?: string } = {};
   try { envelope = JSON.parse(content.replace(/^__EXTRACTED__/, "")) as typeof envelope; } catch { /* */ }
 
-  const { module = "", extracted = {}, summary = "Parameters extracted. Please confirm to proceed.", confidence = "high", missing = [], param_confidence = {} } = envelope;
+  const { module = "", extracted = {}, summary = "Parameters extracted. Please confirm to proceed.", confidence = "high", missing = [], param_confidence = {}, provider = "", model = "" } = envelope;
   const moduleLabel = MODULE_LABELS[module] ?? module.replace(/_/g, " ");
   const confColor = confidence === "high" ? "#15803d" : confidence === "medium" ? "#b45309" : "#b91c1c";
   const confBg    = confidence === "high" ? "#dcfce7" : confidence === "medium" ? "#fef3c7" : "#fee2e2";
@@ -915,6 +934,11 @@ function SteelExtractedCard({
               <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: confColor, background: confBg, padding: "2px 9px", borderRadius: 5 }}>
                 {confLabel}
               </span>
+              {provider && (
+                <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: provider === "DeepSeek" ? "#60a5fa" : "#c084fc", background: provider === "DeepSeek" ? "rgba(96,165,250,0.18)" : "rgba(192,132,252,0.18)", padding: "2px 9px", borderRadius: 5, border: `1px solid ${provider === "DeepSeek" ? "rgba(96,165,250,0.4)" : "rgba(192,132,252,0.4)"}` }}>
+                  {provider === "DeepSeek" ? "⚡" : "◆"} {provider}{model ? ` · ${model}` : ""}
+                </span>
+              )}
               {!expanded && (
                 <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "rgba(255,255,255,.45)", marginLeft: "auto" }}>
                   {totalParams} params
@@ -1214,3 +1238,4 @@ function SteelExtractedCard({
     </div>
   );
 }
+
