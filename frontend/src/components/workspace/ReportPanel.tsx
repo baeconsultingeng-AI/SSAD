@@ -47,10 +47,10 @@ const PARAM_META: Record<string, { name: string; notation: string; unit: string 
   h_mm:                         { name: "Overall Depth",                  notation: "h",          unit: "mm" },
   d_mm:                         { name: "Effective Depth",                notation: "d",          unit: "mm" },
   thickness_h:                  { name: "Slab Thickness",                 notation: "h",          unit: "mm" },
-  concrete_grade_fcu:           { name: "Concrete Characteristic Strength",notation: "f\u2090\u1D64","unit": "N/mm\u00B2" },
-  steel_grade_fy:               { name: "Steel Yield Strength",           notation: "fy",         unit: "N/mm\u00B2" },
-  fcu_Nmm2:                     { name: "Concrete Characteristic Strength",notation: "f\u2090\u1D64","unit": "N/mm\u00B2" },
-  fy_Nmm2:                      { name: "Steel Yield Strength",           notation: "fy",         unit: "N/mm\u00B2" },
+  concrete_grade_fcu:           { name: "Characteristic Compressive Strength of Concrete", notation: "fcu", unit: "N/mm\u00B2" },
+  steel_grade_fy:               { name: "Characteristic Yield Strength of Steel Reinforcement", notation: "fy", unit: "N/mm\u00B2" },
+  fcu_Nmm2:                     { name: "Characteristic Compressive Strength of Concrete", notation: "fcu", unit: "N/mm\u00B2" },
+  fy_Nmm2:                      { name: "Characteristic Yield Strength of Steel Reinforcement", notation: "fy", unit: "N/mm\u00B2" },
   gk:                           { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
   qk:                           { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
   w:                            { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
@@ -574,8 +574,8 @@ export default function ReportPanel() {
               );
               // Group: forces first, then checks
               const forceKeys   = ["design_moment_M","design_shear_V"];
-              const stressKeys  = ["design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc"];
-              const deflKeys    = ["basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d"];
+              const stressKeys  = ["design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc","links_required","recommendation"];
+              const deflKeys    = ["basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"];
               const groups = [
                 { title: "Design Forces",         keys: forceKeys },
                 { title: "Shear Verification",    keys: stressKeys },
