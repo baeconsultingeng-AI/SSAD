@@ -53,15 +53,15 @@ const PARAM_META: Record<string, { name: string; notation: string; unit: string 
   fy_Nmm2:                      { name: "Steel Yield Strength",           notation: "fy",         unit: "N/mm\u00B2" },
   gk:                           { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
   qk:                           { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
-  w:                            { name: "Design Ultimate UDL",            notation: "w\u1D64",    unit: "kN/m" },
+  w:                            { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
   M:                            { name: "Design Bending Moment",          notation: "M",          unit: "kN\u00B7m" },
   V:                            { name: "Design Shear Force",             notation: "V",          unit: "kN" },
   dead_load_gk:                 { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
   live_load_qk:                 { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
-  ultimate_UDL_w:               { name: "Design Ultimate UDL",            notation: "w\u1D64",    unit: "kN/m" },
+  ultimate_UDL_w:               { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
   gk_kNm:                       { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
   qk_kNm:                       { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
-  ultimate_w_kNm:               { name: "Design Ultimate UDL",            notation: "w\u1D64",    unit: "kN/m" },
+  ultimate_w_kNm:               { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
   design_moment_M:              { name: "Design Bending Moment",          notation: "M",          unit: "kN\u00B7m" },
   design_shear_V:               { name: "Design Shear Force",             notation: "V",          unit: "kN" },
   K:                            { name: "Moment Capacity Factor",         notation: "K",          unit: "" },
@@ -92,8 +92,10 @@ const PARAM_META: Record<string, { name: string; notation: string; unit: string 
 };
 
 // Keys that belong in Analysis section (extracted from Loading)
-const ANALYSIS_KEYS = new Set(["design_moment_M","design_shear_V",
+const ANALYSIS_KEYS = new Set([
+  "design_moment_M","design_shear_V","M","V",
   "design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc",
+  "v_Nmm2","vc_Nmm2","link_note",
   "links_required","recommendation","link_note",
   "basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"]);
 
@@ -539,7 +541,7 @@ export default function ReportPanel() {
               let si = 0;
               return inputSections.map((sec) => {
                 const inputEntries = Object.entries(sec.content).filter(([k]) =>
-                  sec.title === "Loading" ? !ANALYSIS_KEYS.has(k) && !DESIGN_OUTPUT_KEYS.has(k) : !DESIGN_OUTPUT_KEYS.has(k)
+                  !ANALYSIS_KEYS.has(k) && !DESIGN_OUTPUT_KEYS.has(k)
                 );
                 if (inputEntries.length === 0) return null;
                 const idx = si++;
