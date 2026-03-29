@@ -252,19 +252,41 @@ def create_app() -> Flask:
                 "error": {"code": "VALIDATION_ERROR", "message": "Field 'description' is required."},
             }), 400
 
+        dual_mode = os.getenv("AI_DUAL_MODE", "false").strip().lower() in ("1", "true", "yes")
+
         try:
-            result = ai_extractor.extract_params(description)
-            return jsonify({
-                "status":           "ok",
-                "module":           result.get("module"),
-                "extracted":        result.get("extracted", {}),
-                "summary":          result.get("summary", "Parameters extracted successfully."),
-                "confidence":       result.get("confidence", "medium"),
-                "missing":          result.get("missing", []),
-                "param_confidence": result.get("param_confidence", {}),
-                "provider":         result.get("_provider_used", ""),
-                "model":            result.get("_model_used", ""),
-            }), 200
+            if dual_mode:
+                result = ai_extractor.extract_params_dual(description)
+            else:
+                result = ai_extractor.extract_params(description)
+
+            auto_selected: bool = result.get("_auto_selected", True)
+            requires_user_choice: bool = (
+                result.get("_dual_mode", False) and not auto_selected
+            )
+
+            response: dict[str, Any] = {
+                "status":             "ok",
+                "module":             result.get("module"),
+                "extracted":          result.get("extracted", {}),
+                "summary":            result.get("summary", "Parameters extracted successfully."),
+                "confidence":         result.get("confidence", "medium"),
+                "missing":            result.get("missing", []),
+                "param_confidence":   result.get("param_confidence", {}),
+                "provider":           result.get("_provider_used", ""),
+                "model":              result.get("_model_used", ""),
+                "dual_mode":          result.get("_dual_mode", False),
+                "convergence":        result.get("_convergence"),
+                "requires_user_choice": requires_user_choice,
+            }
+
+            if requires_user_choice:
+                response["deepseek_result"] = result.get("_deepseek")
+                response["claude_result"]   = result.get("_claude")
+                response["divergent_fields"] = result.get("_divergent_fields", [])
+
+            return jsonify(response), 200
+
         except ValueError as e:
             return jsonify({
                 "status": "error",

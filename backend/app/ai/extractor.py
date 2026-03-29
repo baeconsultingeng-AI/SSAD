@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import anthropic
@@ -187,3 +188,151 @@ def extract_params(description: str) -> dict[str, Any]:
                 f"All AI providers failed. "
                 f"{first_name}: {first_err} | {fallback_name}: {second_err}"
             ) from first_err
+
+
+# ── Dual-model extraction ──────────────────────────────────────────────────
+
+def _flatten_params(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Recursively flatten nested extracted params to dot-notation keys."""
+    items: dict[str, Any] = {}
+    for k, v in d.items():
+        full_key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            items.update(_flatten_params(v, full_key))
+        else:
+            items[full_key] = v
+    return items
+
+
+def _compute_convergence(ds_extracted: dict, cl_extracted: dict) -> dict[str, Any]:
+    """Compare two extracted param dicts and return a convergence score (0–1)
+    plus a list of divergent fields."""
+    ds_flat = _flatten_params(ds_extracted)
+    cl_flat = _flatten_params(cl_extracted)
+    all_keys = set(ds_flat) | set(cl_flat)
+    if not all_keys:
+        return {"score": 1.0, "divergent_fields": []}
+
+    converged = 0
+    divergent: list[dict[str, Any]] = []
+
+    for key in sorted(all_keys):
+        ds_val = ds_flat.get(key)
+        cl_val = cl_flat.get(key)
+
+        if ds_val is None or cl_val is None:
+            divergent.append({"field": key, "deepseek": ds_val, "claude": cl_val, "reason": "missing_in_one"})
+            continue
+
+        # Numeric comparison: converged if within 5% of the larger value
+        try:
+            ds_num = float(ds_val)
+            cl_num = float(cl_val)
+            denom = max(abs(ds_num), abs(cl_num), 1e-9)
+            if abs(ds_num - cl_num) / denom < 0.05:
+                converged += 1
+            else:
+                divergent.append({"field": key, "deepseek": ds_val, "claude": cl_val, "reason": "numeric_diff"})
+        except (ValueError, TypeError):
+            # String comparison (case-insensitive)
+            if str(ds_val).strip().lower() == str(cl_val).strip().lower():
+                converged += 1
+            else:
+                divergent.append({"field": key, "deepseek": ds_val, "claude": cl_val, "reason": "value_diff"})
+
+    score = converged / len(all_keys)
+    return {"score": round(score, 4), "divergent_fields": divergent}
+
+
+def extract_params_dual(description: str) -> dict[str, Any]:
+    """Call both DeepSeek and Claude in parallel.
+
+    - If both succeed: always return both results so the caller can present
+      a side-by-side comparison for the user to choose, regardless of agreement %.
+    - If one fails: fall through to the surviving result (no dual metadata).
+    - If both fail: raise RuntimeError.
+    """
+    ds_model = os.getenv("AI_PRIMARY_MODEL", "deepseek-chat").strip() or "deepseek-chat"
+    cl_model = (
+        os.getenv("AI_FALLBACK_1_MODEL", "claude-sonnet-4-20250514").strip()
+        or "claude-sonnet-4-20250514"
+    )
+
+    CONF_RANK = {"high": 3, "medium": 2, "low": 1}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        future_ds = pool.submit(_call_deepseek, description, "AI_PRIMARY_MODEL")
+        future_cl = pool.submit(_call_claude, description, "AI_FALLBACK_1_MODEL")
+        futures_done = {f: name for f, name in [(future_ds, "DeepSeek"), (future_cl, "Claude")]}
+        results: dict[str, Any] = {}
+        errors: dict[str, str] = {}
+        for future in as_completed(futures_done):
+            name = futures_done[future]
+            try:
+                results[name] = future.result()
+            except Exception as exc:
+                errors[name] = str(exc)
+                print(f"[AI dual] {name} failed: {exc!r}")
+
+    # ── Both failed ──
+    if "DeepSeek" not in results and "Claude" not in results:
+        raise RuntimeError(
+            f"Both AI models failed. DeepSeek: {errors.get('DeepSeek')} | "
+            f"Claude: {errors.get('Claude')}"
+        )
+
+    # ── Only one survived ──
+    if "DeepSeek" not in results:
+        data = results["Claude"]
+        data["_provider_used"] = "Claude"
+        data["_model_used"] = cl_model
+        data["_dual_mode"] = False
+        return data
+    if "Claude" not in results:
+        data = results["DeepSeek"]
+        data["_provider_used"] = "DeepSeek"
+        data["_model_used"] = ds_model
+        data["_dual_mode"] = False
+        return data
+
+    # ── Both succeeded — compute convergence ──
+    ds_data = results["DeepSeek"]
+    cl_data = results["Claude"]
+    conv = _compute_convergence(
+        ds_data.get("extracted", {}),
+        cl_data.get("extracted", {}),
+    )
+    score = conv["score"]
+
+    # Always return both results so the user can compare and choose
+    return {
+        "module": ds_data.get("module") or cl_data.get("module"),
+        "extracted": ds_data.get("extracted", {}),   # placeholder; user must choose
+        "summary": ds_data.get("summary", ""),
+        "confidence": ds_data.get("confidence", "medium"),
+        "missing": ds_data.get("missing", []),
+        "param_confidence": ds_data.get("param_confidence", {}),
+        "_dual_mode": True,
+        "_convergence": score,
+        "_auto_selected": False,
+        "_divergent_fields": conv["divergent_fields"],
+        "_provider_used": "dual",
+        "_model_used": f"{ds_model} + {cl_model}",
+        "_deepseek": {
+            "extracted": ds_data.get("extracted", {}),
+            "summary": ds_data.get("summary", ""),
+            "confidence": ds_data.get("confidence", "medium"),
+            "missing": ds_data.get("missing", []),
+            "param_confidence": ds_data.get("param_confidence", {}),
+            "model": ds_model,
+        },
+        "_claude": {
+            "extracted": cl_data.get("extracted", {}),
+            "summary": cl_data.get("summary", ""),
+            "confidence": cl_data.get("confidence", "medium"),
+            "missing": cl_data.get("missing", []),
+            "param_confidence": cl_data.get("param_confidence", {}),
+            "model": cl_model,
+        },
+    }
+
