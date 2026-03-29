@@ -562,37 +562,39 @@ export default function ReportPanel() {
           {/* -- § 3  Analysis -- */}
           <RptSection num={3} title="Analysis" accent={accent}>
             {(() => {
-              // Pull analysis values from Loading + Shear + Deflection sections
-              const analysisRows: Array<[string, unknown]> = [];
-              sections.forEach(sec => {
-                Object.entries(sec.content).forEach(([k, v]) => {
-                  if (ANALYSIS_KEYS.has(k)) analysisRows.push([k, v]);
-                });
-              });
-              if (analysisRows.length === 0) return (
+              // Directly look up source sections by title — avoids key-scan fragility
+              const loadingSec  = sections.find(s => s.title === "Loading");
+              const shearSec    = sections.find(s => s.title === "Shear Design");
+              const deflSec     = sections.find(s => s.title === "Deflection Check");
+
+              const forceKeys  = ["design_moment_M","design_shear_V"];
+              const stressKeys = ["design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc","links_required","recommendation"];
+              const deflKeys   = ["basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"];
+
+              const groups: Array<{ title: string; src: RptSection | undefined; keys: string[] }> = [
+                { title: "Design Forces",      src: loadingSec, keys: forceKeys },
+                { title: "Shear Verification", src: shearSec,   keys: stressKeys },
+                { title: "Deflection Check",   src: deflSec,    keys: deflKeys },
+              ];
+
+              const renderedGroups = groups
+                .map(g => {
+                  if (!g.src) return null;
+                  const rows = g.keys.filter(k => k in g.src!.content);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={g.title} style={{ marginBottom: 16 }}>
+                      <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>{g.title}</div>
+                      {rows.map(k => <KVRow key={k} label={paramLabel(k)} value={fmtVal(g.src!.content[k])} />)}
+                    </div>
+                  );
+                })
+                .filter(Boolean);
+
+              if (renderedGroups.length === 0) return (
                 <p style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--dim)", margin: 0 }}>Analysis values not available.</p>
               );
-              // Group: forces first, then checks
-              const forceKeys   = ["design_moment_M","design_shear_V"];
-              const stressKeys  = ["design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc","links_required","recommendation"];
-              const deflKeys    = ["basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"];
-              const groups = [
-                { title: "Design Forces",         keys: forceKeys },
-                { title: "Shear Verification",    keys: stressKeys },
-                { title: "Deflection Check",      keys: deflKeys },
-              ];
-              const rowMap = Object.fromEntries(analysisRows);
-              return groups.map(g => {
-                const gRows = g.keys.filter(k => k in rowMap);
-                if (gRows.length === 0) return null;
-                return (
-                  <div key={g.title} style={{ marginBottom: 16 }}>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>{g.title}</div>
-                    {gRows.map(k => <KVRow key={k} label={paramLabel(k)} value={fmtVal(rowMap[k])} />)}
-                    {/* Remaining analysis keys not in explicit groups */}
-                  </div>
-                );
-              });
+              return renderedGroups;
             })()}
           </RptSection>
 
