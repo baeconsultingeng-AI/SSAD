@@ -51,6 +51,11 @@ const PARAM_META: Record<string, { name: string; notation: string; unit: string 
   steel_grade_fy:               { name: "Steel Yield Strength",           notation: "fy",         unit: "N/mm\u00B2" },
   fcu_Nmm2:                     { name: "Concrete Characteristic Strength",notation: "f\u2090\u1D64","unit": "N/mm\u00B2" },
   fy_Nmm2:                      { name: "Steel Yield Strength",           notation: "fy",         unit: "N/mm\u00B2" },
+  gk:                           { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
+  qk:                           { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
+  w:                            { name: "Design Ultimate UDL",            notation: "w\u1D64",    unit: "kN/m" },
+  M:                            { name: "Design Bending Moment",          notation: "M",          unit: "kN\u00B7m" },
+  V:                            { name: "Design Shear Force",             notation: "V",          unit: "kN" },
   dead_load_gk:                 { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
   live_load_qk:                 { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
   ultimate_UDL_w:               { name: "Design Ultimate UDL",            notation: "w\u1D64",    unit: "kN/m" },
@@ -524,7 +529,9 @@ export default function ReportPanel() {
           <RptSection num={2} title="Design Input" accent={accent}>
             {(() => {
               // Filter out "Project Details" — already shown in §1
-              const inputSections = sections.filter(s => s.title !== "Project Details");
+              const inputSections = sections.filter(s =>
+                  !["Project Details","Bending Design","Shear Design","Deflection Check"].includes(s.title)
+                );
               // For Loading section, filter out Analysis-category keys
               if (inputSections.length === 0) return (
                 <p style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--dim)", margin: 0 }}>No input summary available.</p>
@@ -836,9 +843,9 @@ export default function ReportPanel() {
           {/* -- Detailed Calculation Steps (audit trail) -- */}
           <div style={{ borderTop: "3px solid #ede9e1" }}>
             <div style={{ padding: "14px 18px 10px", background: "#f5f3f0", borderBottom: "2px solid #e8e2d9", display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 900, color: accent }}>APPENDIX A</span>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "var(--txt)" }}>� Detailed Calculation Audit Trail</span>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", marginLeft: "auto" }}>{calcResult.steps.length} steps � Python handcalcs</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 900, color: accent }}>APPENDIX A</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: "var(--txt)" }}>� Detailed Calculation Audit Trail</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)", marginLeft: "auto" }}>{calcResult.steps.length} steps � Python handcalcs</span>
             </div>
             <CalcStepsBlock steps={calcResult.steps} accent={accent} />
           </div>
