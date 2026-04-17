@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { UserTier } from "@/types/calc";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
 // ─── Types ────────────────────────────────────────────────
 
 export interface AuthUser {
@@ -11,17 +13,75 @@ export interface AuthUser {
   fullName: string;
   tier: UserTier;
   trialExpiresAt?: string;
+  firm?: string;
+  role?: string;
+  country?: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  full_name: string;
+  firm?: string;
+  role?: string;
+  country?: string;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
+  token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   effectiveTier: UserTier;
   login: (email: string, password: string) => Promise<void>;
-  loginLocal: (user: AuthUser) => void;
+  register: (payload: RegisterPayload) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   loginAsGuest: () => void;
   logout: () => void;
+}
+
+// ─── AuthApiError ─────────────────────────────────────────
+// Carries the optional `code` field that the backend sends for specific
+// error conditions (e.g. "EMAIL_NOT_VERIFIED").
+
+export class AuthApiError extends Error {
+  code: string | undefined;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "AuthApiError";
+    this.code = code;
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+function apiUserToAuthUser(u: Record<string, string>): AuthUser {
+  return {
+    id:             u.id,
+    email:          u.email,
+    fullName:       u.full_name ?? "",
+    tier:           (u.tier ?? "trial") as UserTier,
+    trialExpiresAt: u.trial_expires_at ?? undefined,
+    firm:           u.firm ?? "",
+    role:           u.role ?? "",
+    country:        u.country ?? "",
+  };
+}
+
+async function authPost(path: string, body: object): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+  const data = await res.json() as Record<string, unknown>;
+  if (!res.ok) {
+    throw new AuthApiError(
+      (data.error as string) ?? `Request failed (${res.status})`,
+      data.code as string | undefined,
+    );
+  }
+  return data;
 }
 
 // ─── Context ──────────────────────────────────────────────
@@ -29,43 +89,61 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser]   = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sprint 1 stub: restore from localStorage; real Supabase auth in Sprint 2
+  // Restore persisted session on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("ssad_user");
-      if (stored) {
-        setUser(JSON.parse(stored) as AuthUser);
+      const storedToken = localStorage.getItem("ssad_token");
+      const storedUser  = localStorage.getItem("ssad_user");
+      if (storedToken && storedUser) {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser) as AuthUser);
       }
     } catch {
-      // ignore
+      // ignore parse errors
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const login = useCallback(
-    async (_email: string, _password: string) => {
-      // Sprint 1 stub: will be replaced with Supabase auth
-      throw new Error("Auth not yet connected — Sprint 2 implementation");
-    },
-    []
-  );
-
-  const loginLocal = useCallback((u: AuthUser) => {
+  const _persist = useCallback((t: string, u: AuthUser) => {
+    localStorage.setItem("ssad_token", t);
     localStorage.setItem("ssad_user", JSON.stringify(u));
+    setToken(t);
     setUser(u);
   }, []);
 
+  const login = useCallback(async (email: string, password: string) => {
+    const data = await authPost("/api/v1/auth/login", { email, password });
+    _persist(
+      data.token as string,
+      apiUserToAuthUser(data.user as Record<string, string>),
+    );
+  }, [_persist]);
+
+  const register = useCallback(async (payload: RegisterPayload) => {
+    // Backend now returns { message, email } — no token.
+    // User must verify their email before they can log in.
+    await authPost("/api/v1/auth/register", payload);
+    // Intentionally do NOT call _persist here.
+  }, []);
+
+  const resendVerification = useCallback(async (email: string) => {
+    await authPost("/api/v1/auth/resend-verification", { email });
+  }, []);
+
   const loginAsGuest = useCallback(() => {
-    // Guest users are session-only — not persisted to localStorage
+    setToken(null);
     setUser({ id: "guest", email: "", fullName: "Guest", tier: "guest" });
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem("ssad_token");
     localStorage.removeItem("ssad_user");
+    setToken(null);
     setUser(null);
   }, []);
 
@@ -78,11 +156,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        token,
         isLoading,
         isAuthenticated: !!user,
         effectiveTier,
         login,
-        loginLocal,
+        register,
+        resendVerification,
         loginAsGuest,
         logout,
       }}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useWorkspace } from "@/context/WorkspaceContext";
-import type { CalcCheck, CalcStep } from "@/types/calc";
+import type { CalcCheck, CalcResponse, CalcStep } from "@/types/calc";
 import {
   loadProjects, appendCalc, createProject as mkProject,
   type StoredProject, type ProjectInfo,
@@ -33,26 +33,104 @@ const MODULE_SHORT: Record<string, string> = {
   steel_portal_bs_v1:  "Steel-Portal",
 };
 
-// Friendly name for a raw key: "fcu_Nmm2" ? "fcu (N/mm�)"
-function prettyKey(k: string): string {
+// ── Parameter metadata: full name, notation, unit ──────────────────────────
+const PARAM_META: Record<string, { name: string; notation: string; unit: string }> = {
+  width_b:                      { name: "Section Width",                  notation: "b",          unit: "mm" },
+  overall_depth_h:              { name: "Overall Depth",                  notation: "h",          unit: "mm" },
+  effective_depth_d:            { name: "Effective Depth",                notation: "d",          unit: "mm" },
+  span:                         { name: "Span",                           notation: "L",          unit: "m" },
+  span_m:                       { name: "Span",                           notation: "L",          unit: "m" },
+  support_type:                 { name: "Support Condition",              notation: "\u2014",      unit: "" },
+  cover:                        { name: "Nominal Cover",                  notation: "c",          unit: "mm" },
+  cover_mm:                     { name: "Nominal Cover",                  notation: "c",          unit: "mm" },
+  b_mm:                         { name: "Section Width",                  notation: "b",          unit: "mm" },
+  h_mm:                         { name: "Overall Depth",                  notation: "h",          unit: "mm" },
+  d_mm:                         { name: "Effective Depth",                notation: "d",          unit: "mm" },
+  thickness_h:                  { name: "Slab Thickness",                 notation: "h",          unit: "mm" },
+  concrete_grade_fcu:           { name: "Characteristic Compressive Strength of Concrete", notation: "fcu", unit: "N/mm\u00B2" },
+  steel_grade_fy:               { name: "Characteristic Yield Strength of Steel Reinforcement", notation: "fy", unit: "N/mm\u00B2" },
+  fcu_Nmm2:                     { name: "Characteristic Compressive Strength of Concrete", notation: "fcu", unit: "N/mm\u00B2" },
+  fy_Nmm2:                      { name: "Characteristic Yield Strength of Steel Reinforcement", notation: "fy", unit: "N/mm\u00B2" },
+  gk:                           { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
+  qk:                           { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
+  w:                            { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
+  M:                            { name: "Design Bending Moment",          notation: "M",          unit: "kN\u00B7m" },
+  V:                            { name: "Design Shear Force",             notation: "V",          unit: "kN" },
+  dead_load_gk:                 { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
+  live_load_qk:                 { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
+  ultimate_UDL_w:               { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
+  gk_kNm:                       { name: "Characteristic Dead Load",       notation: "Gk",         unit: "kN/m" },
+  qk_kNm:                       { name: "Characteristic Live Load",       notation: "Qk",         unit: "kN/m" },
+  ultimate_w_kNm:               { name: "Design Ultimate Load",           notation: "w\u1D64",    unit: "kN/m" },
+  design_moment_M:              { name: "Design Bending Moment",          notation: "M",          unit: "kN\u00B7m" },
+  design_shear_V:               { name: "Design Shear Force",             notation: "V",          unit: "kN" },
+  K:                            { name: "Moment Capacity Factor",         notation: "K",          unit: "" },
+  K_prime:                      { name: "Limiting Redistribution Factor", notation: "K\u2032",    unit: "" },
+  lever_arm_z:                  { name: "Lever Arm",                      notation: "z",          unit: "mm" },
+  As_required:                  { name: "Steel Area Required",            notation: "As,req",     unit: "mm\u00B2" },
+  As_minimum:                   { name: "Minimum Steel Area",             notation: "As,min",     unit: "mm\u00B2" },
+  As_design:                    { name: "Steel Area Provided",            notation: "As,prov",    unit: "mm\u00B2" },
+  as_design_mm2:                { name: "Steel Area Provided",            notation: "As,prov",    unit: "mm\u00B2" },
+  design_shear_stress_v:        { name: "Design Shear Stress",            notation: "v",          unit: "N/mm\u00B2" },
+  max_shear_stress_v_max:       { name: "Maximum Allowable Shear Stress", notation: "v\u2098\u2090\u02E3","unit": "N/mm\u00B2" },
+  concrete_shear_resistance_vc: { name: "Concrete Shear Capacity",        notation: "vc",         unit: "N/mm\u00B2" },
+  links_required:               { name: "Shear Reinforcement Required",   notation: "\u2014",     unit: "" },
+  recommendation:               { name: "Design Recommendation",          notation: "\u2014",     unit: "" },
+  v_Nmm2:                       { name: "Design Shear Stress",            notation: "v",          unit: "N/mm\u00B2" },
+  vc_Nmm2:                      { name: "Concrete Shear Capacity",        notation: "vc",         unit: "N/mm\u00B2" },
+  link_note:                    { name: "Shear Link Note",                notation: "\u2014",     unit: "" },
+  basic_span_depth_ratio:       { name: "Basic Span/Depth Ratio",         notation: "L/d (basic)","unit": "" },
+  modification_factor_MF:       { name: "Modification Factor",            notation: "MF",         unit: "" },
+  allowable_l_d:                { name: "Allowable Span/Depth Ratio",     notation: "L/d (allow)","unit": "" },
+  actual_l_d:                   { name: "Actual Span/Depth Ratio",        notation: "L/d (actual)","unit": "" },
+  status:                       { name: "Check Status",                   notation: "\u2014",     unit: "" },
+  section:                      { name: "Steel Section Designation",      notation: "\u2014",     unit: "" },
+  section_class:                { name: "Section Classification",         notation: "\u2014",     unit: "" },
+  Ix_cm4:                       { name: "Second Moment of Area (Major)",  notation: "Ix",         unit: "cm\u2074" },
+  Sx_cm3:                       { name: "Plastic Section Modulus",        notation: "Sx",         unit: "cm\u00B3" },
+  Zx_cm3:                       { name: "Elastic Section Modulus",        notation: "Zx",         unit: "cm\u00B3" },
+};
+
+// Keys that belong in Analysis section (extracted from Loading)
+const ANALYSIS_KEYS = new Set([
+  "design_moment_M","design_shear_V","M","V",
+  "design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc",
+  "v_Nmm2","vc_Nmm2","link_note",
+  "links_required","recommendation","link_note",
+  "basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"]);
+
+// Keys that belong in Design Output section
+const DESIGN_OUTPUT_KEYS = new Set(["K","K_prime","lever_arm_z",
+  "As_required","As_minimum","As_design","as_design_mm2"]);
+
+function paramLabel(k: string): string {
+  const m = PARAM_META[k];
+  if (m) {
+    let label = m.name;
+    if (m.notation && m.notation !== "\u2014") label += ` (${m.notation})`;
+    if (m.unit) label += ` [${m.unit}]`;
+    return label;
+  }
   return k
-    .replace(/_Nmm2$/,  " (N/mm�)")
-    .replace(/_kNm2$/,  " (kN/m�)")
-    .replace(/_kNm$/,   " (kN�m)")
-    .replace(/_kN$/,    " (kN)")
-    .replace(/_mm2$/,   " (mm�)")
-    .replace(/_mm$/,    " (mm)")
-    .replace(/_m$/,     " (m)")
-    .replace(/_cm4$/,   " (cm4)")
-    .replace(/_cm2$/,   " (cm�)")
-    .replace(/_cm3$/,   " (cm�)")
-    .replace(/_MPa$/,   " (MPa)")
-    .replace(/_deg$/,   " (�)")
-    .replace(/_/g,      " ");
+    .replace(/_Nmm2$/, " (N/mm\u00B2)")
+    .replace(/_kNm2$/, " (kN/m\u00B2)")
+    .replace(/_kNm$/,  " (kN\u00B7m)")
+    .replace(/_kN$/,   " (kN)")
+    .replace(/_mm2$/,  " (mm\u00B2)")
+    .replace(/_mm$/,   " (mm)")
+    .replace(/_m$/,    " (m)")
+    .replace(/_cm4$/,  " (cm\u2074)")
+    .replace(/_cm2$/,  " (cm\u00B2)")
+    .replace(/_cm3$/,  " (cm\u00B3)")
+    .replace(/_MPa$/,  " (MPa)")
+    .replace(/_deg$/,  " (\u00B0)")
+    .replace(/_/g,     " ");
 }
 
+function prettyKey(k: string): string { return paramLabel(k); }
+
 function fmtVal(val: unknown): string {
-  if (val === null || val === undefined) return "�";
+  if (val === null || val === undefined) return "\u2014";
   if (typeof val === "boolean")  return val ? "Yes" : "No";
   if (typeof val === "number")   return Number.isInteger(val) ? String(val) : val.toFixed(4);
   if (typeof val === "string")   return val;
@@ -280,14 +358,28 @@ export default function ReportPanel() {
         setShowSaveDialog(true);
       }
     } else {
-      // Standalone mode — save directly, no panel needed
-      performSave(null, EMPTY_INFO);
+      // Standalone mode — show dialog to collect project information first
+      setShowSaveDialog(true);
     }
   }, [projectId, performSave]);
 
   const handlePDF = useCallback(() => {
-    showToast("Opening print / save as PDF�");
-    setTimeout(() => window.print(), 250);
+    const rptEl = document.getElementById("rpt-document");
+    if (!rptEl) { window.print(); return; }
+    const styleSheets = Array.from(document.styleSheets)
+      .map(ss => { try { return Array.from(ss.cssRules).map((r: CSSRule) => r.cssText).join("\n"); } catch { return ""; } })
+      .join("\n");
+    const w = window.open("", "_blank");
+    if (!w) { window.print(); return; }
+    w.document.write(
+      "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Structural Calculation Report</title>" +
+      "<style>" + styleSheets + "\n@media print{body{margin:0;}}</style></head>" +
+      "<body>" + rptEl.outerHTML + "</body></html>"
+    );
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 600);
+    showToast("Print dialog opened \u2014 save as PDF from your browser");
   }, [showToast]);
 
   const handleWord = useCallback(() => {
@@ -381,7 +473,7 @@ export default function ReportPanel() {
 
       {/* -- Scrollable document -- */}
       <div className="scr" style={{ background: "#ddd9d2" }}>
-        <div style={{ margin: "14px 14px 32px", background: "#fff", border: "1px solid #d4cfc8", borderRadius: 14, overflow: "hidden", boxShadow: "0 6px 30px rgba(0,0,0,.12)" }}>
+        <div id="rpt-document" style={{ margin: "14px 14px 32px", background: "#fff", border: "1px solid #d4cfc8", borderRadius: 14, overflow: "hidden", boxShadow: "0 6px 30px rgba(0,0,0,.12)" }}>
 
           {/* -- Letterhead -- */}
           <div className="rpt-lhd" style={{ background: headerBg }}>
@@ -435,54 +527,120 @@ export default function ReportPanel() {
             <KVRow label="Date"          value={today} />
             <KVRow label="Certification" value="Requires Chartered Engineer Review" highlight />
           </RptSection>
-
-          {/* -- � 2  Design Input -- */}
+          {/* -- § 2  Design Input -- */}
           <RptSection num={2} title="Design Input" accent={accent}>
-            {sections.length === 0 ? (
-              <p style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--dim)", margin: 0, padding: "4px 0" }}>
-                No input summary available.
-              </p>
-            ) : sections.map((sec, si) => (
-              <div key={si} style={{ marginBottom: si < sections.length - 1 ? 14 : 0 }}>
-                <div style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}28` }}>
-                  {String.fromCharCode(65 + si)}. {sec.title}
-                </div>
-                {Object.entries(sec.content).map(([k, v]) => (
-                  <KVRow key={k} label={prettyKey(k)} value={fmtVal(v)} />
-                ))}
-              </div>
-            ))}
+            {(() => {
+              // Filter out "Project Details" — already shown in §1
+              const inputSections = sections.filter(s =>
+                  !["Project Details","Bending Design","Shear Design","Deflection Check"].includes(s.title)
+                );
+              // For Loading section, filter out Analysis-category keys
+              if (inputSections.length === 0) return (
+                <p style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--dim)", margin: 0 }}>No input summary available.</p>
+              );
+              let si = 0;
+              return inputSections.map((sec) => {
+                const inputEntries = Object.entries(sec.content).filter(([k]) =>
+                  !ANALYSIS_KEYS.has(k) && !DESIGN_OUTPUT_KEYS.has(k)
+                );
+                if (inputEntries.length === 0) return null;
+                const idx = si++;
+                return (
+                  <div key={sec.title} style={{ marginBottom: 16 }}>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 16, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 10, paddingBottom: 5, borderBottom: `2px solid ${accent}28` }}>
+                      {String.fromCharCode(65 + idx)}. {sec.title}
+                    </div>
+                    {inputEntries.map(([k, v]) => (
+                      <KVRow key={k} label={paramLabel(k)} value={fmtVal(v)} />
+                    ))}
+                  </div>
+                );
+              });
+            })()}
           </RptSection>
 
-          {/* -- � 3  Design Output -- */}
-          <RptSection num={3} title="Design Output" accent={accent}>
-            {/* Utilization gauge */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px" }}>Overall Utilization</span>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 800, color: utilBarColor }}>{util}% � {verdict.toUpperCase()}</span>
+          {/* -- § 3  Analysis -- */}
+          <RptSection num={3} title="Analysis" accent={accent}>
+            {(() => {
+              // Directly look up source sections by title — avoids key-scan fragility
+              const loadingSec  = sections.find(s => s.title === "Loading");
+              const shearSec    = sections.find(s => s.title === "Shear Design");
+              const deflSec     = sections.find(s => s.title === "Deflection Check");
+
+              const forceKeys  = ["design_moment_M","design_shear_V"];
+              const stressKeys = ["design_shear_stress_v","max_shear_stress_v_max","concrete_shear_resistance_vc","links_required","recommendation"];
+              const deflKeys   = ["basic_span_depth_ratio","modification_factor_MF","allowable_l_d","actual_l_d","status"];
+
+              const groups: Array<{ title: string; src: RptSection | undefined; keys: string[] }> = [
+                { title: "Design Forces",      src: loadingSec, keys: forceKeys },
+                { title: "Shear Verification", src: shearSec,   keys: stressKeys },
+                { title: "Deflection Check",   src: deflSec,    keys: deflKeys },
+              ];
+
+              const renderedGroups = groups
+                .map(g => {
+                  if (!g.src) return null;
+                  const rows = g.keys.filter(k => k in g.src!.content);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={g.title} style={{ marginBottom: 16 }}>
+                      <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>{g.title}</div>
+                      {rows.map(k => <KVRow key={k} label={paramLabel(k)} value={fmtVal(g.src!.content[k])} />)}
+                    </div>
+                  );
+                })
+                .filter(Boolean);
+
+              if (renderedGroups.length === 0) return (
+                <p style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--dim)", margin: 0 }}>Analysis values not available.</p>
+              );
+              return renderedGroups;
+            })()}
+          </RptSection>
+
+          {/* -- § 4  Design Output -- */}
+          <RptSection num={4} title="Design Output" accent={accent}>
+            {/* Utilization bar */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".8px" }}>Overall Utilisation</span>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 18, fontWeight: 800, color: utilBarColor }}>{util}% — {verdict.toUpperCase()}</span>
               </div>
-              <div style={{ height: 10, background: "#e5e0d8", borderRadius: 6, overflow: "hidden", marginBottom: 5 }}>
+              <div style={{ height: 12, background: "#e5e0d8", borderRadius: 6, overflow: "hidden", marginBottom: 6 }}>
                 <div style={{ height: "100%", width: `${Math.min(util, 100)}%`, background: `linear-gradient(90deg,${utilBarColor}cc,${utilBarColor})`, borderRadius: 6 }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 {[0, 25, 50, 75, 100].map(t => (
-                  <span key={t} style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--dim)" }}>{t}%</span>
+                  <span key={t} style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--dim)" }}>{t}%</span>
                 ))}
               </div>
             </div>
-            {/* Design summary */}
+            {/* Verdict */}
             <KVRow label="Overall Verdict"    value={verdictIcon} />
             <KVRow label="Governing Util."    value={`${util}%`} />
-            <KVRow label="Design Summary"     value={calcResult.results.summary} />
-            {/* Key result values from calc steps */}
-            {calcResult.steps.slice(-4).map((s, i) => s.value != null && (
-              <KVRow key={i} label={s.label} value={`${typeof s.value === "number" && !Number.isInteger(s.value) ? s.value.toFixed(4) : s.value}${s.unit ? ` ${s.unit}` : ""}`} />
-            ))}
+            <div style={{ height: 12 }} />
+            {/* Reinforcement / section output from backend sections */}
+            {(() => {
+              const outRows: Array<[string, unknown]> = [];
+              sections.forEach(sec => {
+                if (["Bending Design","Shear Design","Section Design","Steel Section","Connection Design"].includes(sec.title)) {
+                  Object.entries(sec.content).forEach(([k, v]) => outRows.push([k, v]));
+                }
+              });
+              if (outRows.length === 0) {
+                // Fallback: show last 5 calc steps
+                return calcResult.steps.slice(-5).map((s, i) => s.value != null ? (
+                  <KVRow key={i} label={s.label} value={`${typeof s.value === "number" && !Number.isInteger(s.value) ? s.value.toFixed(4) : s.value}${s.unit ? ` ${s.unit}` : ""}`} />
+                ) : null);
+              }
+              return outRows.map(([k, v]) => <KVRow key={k} label={paramLabel(k)} value={fmtVal(v)} />);
+            })()}
+            <div style={{ height: 12 }} />
+            <KVRow label="Design Summary" value={calcResult.results.summary} />
           </RptSection>
 
           {/* -- � 4  Design Checks -- */}
-          <RptSection num={4} title="Design Checks" accent={accent}>
+          <RptSection num={5} title="Design Checks" accent={accent}>
             {/* Summary strip */}
             {calcResult.checks.length > 0 && (
               <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
@@ -512,11 +670,11 @@ export default function ReportPanel() {
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                     <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 800, color: cc, flexShrink: 0, width: 22, textAlign: "center" }}>{ci}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "var(--ui)", fontSize: 14, fontWeight: 600, color: "var(--txt)", lineHeight: 1.3 }}>{check.label}</div>
+                      <div style={{ fontFamily: "var(--ui)", fontSize: 17, fontWeight: 600, color: "var(--txt)", lineHeight: 1.3 }}>{check.label}</div>
                       {check.clause && <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", marginTop: 2 }}>{check.clause}</div>}
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 800, color: "var(--txt)" }}>{check.value != null ? check.value.toFixed(3) : "�"}</div>
+                      <div style={{ fontFamily: "var(--mono)", fontSize: 18, fontWeight: 800, color: "var(--txt)" }}>{check.value != null ? check.value.toFixed(3) : "�"}</div>
                       <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)" }}>/ {check.limit != null ? check.limit.toFixed(3) : "�"}</div>
                     </div>
                   </div>
@@ -533,72 +691,95 @@ export default function ReportPanel() {
             })}
           </RptSection>
 
-          {/* -- � 5  Quantities -- */}
-          <RptSection num={5} title="Quantities" accent={accent}>
+                    {/* -- § 6  Quantities -- */}
+          <RptSection num={6} title="Quantities" accent={accent}>
             {(() => {
-              // Extract quantity-like fields from detailingPayload and normalizedInputs
               const dp = (calcResult.detailingPayload ?? {}) as Record<string, unknown>;
               const ni = (calcResult.normalizedInputs ?? {}) as Record<string, Record<string, unknown>>;
-              const rows: Array<{ k: string; v: unknown }> = [];
+              const dims = (dp.dimensions ?? {}) as Record<string, unknown>;
+              const rein = (dp.reinforcement ?? {}) as Record<string, unknown>;
+              const isRC    = (calcResult.module ?? "").startsWith("rc_");
+              const isStl   = (calcResult.module ?? "").startsWith("steel_");
 
-              // From detailingPayload � reinforcement / section quantities
-              const rein = dp.reinforcement as Record<string, unknown> | undefined;
-              if (rein) Object.entries(rein).forEach(([k, v]) => rows.push({ k, v }));
+              // ── concrete volume ────────────────────────────────────────
+              let concreteVol: number | null = null;
+              const b = parseFloat(String(dims.b_mm ?? ni.geometry?.b_mm ?? ""));
+              const h = parseFloat(String(dims.h_mm ?? ni.geometry?.h_mm ?? ""));
+              const span = parseFloat(String(dims.span_m ?? ni.geometry?.span_m ?? ""));
+              if (isRC && !isNaN(b) && !isNaN(h) && !isNaN(span)) {
+                concreteVol = (b / 1000) * (h / 1000) * span;
+              }
+              const thk = parseFloat(String(dims.thickness_mm ?? ni.geometry?.thickness_mm ?? ""));
+              const lx  = parseFloat(String(ni.geometry?.lx_m ?? ""));
+              const ly  = parseFloat(String(ni.geometry?.ly_m ?? ""));
+              if (isRC && !isNaN(thk) && !isNaN(lx) && !isNaN(ly) && concreteVol === null) {
+                concreteVol = (thk / 1000) * lx * ly;
+              }
 
-              const dims = dp.dimensions as Record<string, unknown> | undefined;
-              if (dims) Object.entries(dims).forEach(([k, v]) => rows.push({ k, v }));
+              // ── steel weight ───────────────────────────────────────────
+              let steelKg: number | null = null;
+              const asD = parseFloat(String(rein.as_design_mm2 ?? ""));
+              if (isRC && !isNaN(asD) && !isNaN(span)) {
+                // Approximate: As × L × density (7850 kg/m³) × 1e-6
+                steelKg = asD * span * 7850 * 1e-6;
+              }
+              // Steel members: use section area from steps if available
+              if (isStl) {
+                const massStep = calcResult.steps.find(s => s.label.toLowerCase().includes("mass") || s.label.toLowerCase().includes("weight"));
+                if (massStep && typeof massStep.value === "number") steelKg = massStep.value;
+              }
 
-              const shear = dp.shear as Record<string, unknown> | undefined;
-              if (shear) Object.entries(shear).forEach(([k, v]) => rows.push({ k, v }));
+              // ── formwork area ──────────────────────────────────────────
+              let formworkM2: number | null = null;
+              if (isRC && !isNaN(b) && !isNaN(h) && !isNaN(span)) {
+                // Soffit + 2 sides
+                formworkM2 = ((b / 1000) + 2 * (h / 1000)) * span;
+              }
+              if (isRC && !isNaN(thk) && !isNaN(lx) && !isNaN(ly) && formworkM2 === null) {
+                formworkM2 = lx * ly; // slab soffit only
+              }
 
-              const moment = dp.moment as Record<string, unknown> | undefined;
-              if (moment) Object.entries(moment).forEach(([k, v]) => rows.push({ k, v }));
-
-              // From normalizedInputs loads/geometry if no detailing
-              if (rows.length === 0 && ni.loads) Object.entries(ni.loads).forEach(([k, v]) => rows.push({ k, v }));
-              if (rows.length === 0 && ni.geometry) Object.entries(ni.geometry).forEach(([k, v]) => rows.push({ k, v }));
-
-              if (rows.length === 0) return <p style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--dim)", margin: 0 }}>Quantities not available for this module.</p>;
-
-              return rows.map(({ k, v }) => (
-                <KVRow key={k} label={prettyKey(k)} value={fmtVal(v)} />
-              ));
+              const hasAny = concreteVol !== null || steelKg !== null || formworkM2 !== null;
+              if (!hasAny) return (
+                <p style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--dim)", margin: 0 }}>
+                  Quantities will be available once the section geometry is fully defined.
+                </p>
+              );
+              return (
+                <>
+                  {concreteVol !== null && (
+                    <KVRow
+                      label="Volume of Concrete (Vc) [m\u00B3]"
+                      value={concreteVol.toFixed(3) + " m\u00B3"}
+                    />
+                  )}
+                  {steelKg !== null && (
+                    <KVRow
+                      label={isStl ? "Steel Section Mass (M) [kg/m]" : "Estimated Steel Reinforcement Mass (Est.) [kg]"}
+                      value={steelKg.toFixed(2) + (isStl ? " kg/m" : " kg  (\u2248" + (steelKg / 1000).toFixed(3) + " t)")}
+                    />
+                  )}
+                  {formworkM2 !== null && (
+                    <KVRow
+                      label="Formwork Area (Af) [m\u00B2]"
+                      value={formworkM2.toFixed(2) + " m\u00B2"}
+                    />
+                  )}
+                  <div style={{ marginTop: 12, fontFamily: "var(--mono)", fontSize: 12, color: "var(--dim)", lineHeight: 1.6 }}>
+                    Note: Quantities are estimated from the design geometry. Confirm with a qualified quantity surveyor for tendering and construction purposes.
+                  </div>
+                </>
+              );
             })()}
           </RptSection>
 
-          {/* -- � 6  Detailing -- */}
-          <RptSection num={6} title="Detailing" accent={accent}>
-            {(() => {
-              const dp = (calcResult.detailingPayload ?? {}) as Record<string, unknown>;
-              const hasDP = Object.keys(dp).length > 0;
-              if (!hasDP) return <p style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--dim)", margin: 0 }}>Detailing data not available. View the Detailing screen for full rebar / connection drawings.</p>;
-
-              const skip = new Set(["element", "reinforcement", "dimensions", "shear", "moment"]);
-              const rows: Array<{ k: string; v: unknown }> = [];
-              Object.entries(dp).forEach(([k, v]) => {
-                if (skip.has(k)) return;
-                if (typeof v === "object" && v !== null) {
-                  Object.entries(v as Record<string, unknown>).forEach(([k2, v2]) => rows.push({ k: k2, v: v2 }));
-                } else {
-                  rows.push({ k, v });
-                }
-              });
-              if (rows.length === 0) rows.push({ k: "element", v: dp.element });
-
-              const el = dp.element as string | undefined;
-              return <>
-                {el && <div style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 10 }}>{el.replace(/_/g, " ")}</div>}
-                {rows.map(({ k, v }) => <KVRow key={k} label={prettyKey(k)} value={fmtVal(v)} />)}
-                <div style={{ marginTop: 12, padding: "9px 12px", background: `${accent}0a`, border: `1px solid ${accent}28`, borderRadius: 7, fontFamily: "var(--ui)", fontSize: 13, color: accent, lineHeight: 1.5 }}>
-                  For full detailing drawings (rebar schedule, bar bending diagrams, connection details) navigate to the <strong>Detailing</strong> screen.
-                </div>
-              </>;
-            })()}
+          {/* -- § 7  Detailing -- */}
+          <RptSection num={7} title="Detailing" accent={accent}>
+            <ElementSVG calcResult={calcResult} accent={accent} />
           </RptSection>
-
-          {/* -- � 7  General Interpretation -- */}
-          <RptSection num={7} title="General Interpretation" accent={accent}>
-            <div style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--txt)", lineHeight: 1.7, marginBottom: 12 }}>
+{/* -- � 7  General Interpretation -- */}
+          <RptSection num={8} title="General Interpretation" accent={accent}>
+            <div style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--txt)", lineHeight: 1.7, marginBottom: 12 }}>
               {calcResult.results.summary}
             </div>
             {calcResult.warnings.length > 0 && (
@@ -616,7 +797,7 @@ export default function ReportPanel() {
             )}
             {/* Verdict interpretation */}
             <div style={{ background: verdictBg, border: `1.5px solid ${verdictBorder}`, borderRadius: 8, padding: "10px 13px" }}>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 800, color: verdictColor, marginBottom: 5 }}>{verdictIcon}</div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 800, color: verdictColor, marginBottom: 5 }}>{verdictIcon}</div>
               <div style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--txt)", lineHeight: 1.6 }}>
                 {verdict === "pass"
                   ? `The element satisfies all code requirements at ${util}% utilization. The design is considered adequate under the applied loading. It is recommended that an engineer verify the applied inputs and review all sections prior to use in construction.`
@@ -628,7 +809,7 @@ export default function ReportPanel() {
           </RptSection>
 
           {/* -- � 8  Design Optimisation -- */}
-          <RptSection num={8} title="Design Optimisation" accent={accent}>
+          <RptSection num={9} title="Design Optimisation" accent={accent}>
             {(() => {
               // Derive optimisation hints from utilization and check results
               const hints: string[] = [];
@@ -657,7 +838,7 @@ export default function ReportPanel() {
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: `${accent}18`, border: `1.5px solid ${accent}40`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--mono)", fontSize: 12, fontWeight: 800, color: accent, flexShrink: 0, marginTop: 1 }}>
                     {i + 1}
                   </div>
-                  <p style={{ margin: 0, fontFamily: "var(--ui)", fontSize: 14, color: "var(--txt)", lineHeight: 1.65 }}>{h}</p>
+                  <p style={{ margin: 0, fontFamily: "var(--ui)", fontSize: 17, color: "var(--txt)", lineHeight: 1.65 }}>{h}</p>
                 </div>
               ));
             })()}
@@ -666,9 +847,9 @@ export default function ReportPanel() {
           {/* -- Detailed Calculation Steps (audit trail) -- */}
           <div style={{ borderTop: "3px solid #ede9e1" }}>
             <div style={{ padding: "14px 18px 10px", background: "#f5f3f0", borderBottom: "2px solid #e8e2d9", display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 900, color: accent }}>APPENDIX A</span>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "var(--txt)" }}>� Detailed Calculation Audit Trail</span>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", marginLeft: "auto" }}>{calcResult.steps.length} steps � Python handcalcs</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 900, color: accent }}>APPENDIX A</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: "var(--txt)" }}>� Detailed Calculation Audit Trail</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)", marginLeft: "auto" }}>{calcResult.steps.length} steps � Python handcalcs</span>
             </div>
             <CalcStepsBlock steps={calcResult.steps} accent={accent} />
           </div>
@@ -727,7 +908,7 @@ function RptSection({ num, title, accent, children }: { num: number; title: stri
         <div style={{ width: 30, height: 30, borderRadius: 8, background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 900, color: "#fff" }}>{num}</span>
         </div>
-        <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: ".8px" }}>{title}</span>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 16, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: ".8px" }}>{title}</span>
       </div>
       {/* Section body */}
       <div style={{ padding: "13px 18px" }}>
@@ -741,9 +922,9 @@ function RptSection({ num, title, accent, children }: { num: number; title: stri
 
 function KVRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "5px 0", borderBottom: "1px solid rgba(0,0,0,.045)" }}>
-      <span style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--mut)", flexShrink: 0, marginRight: 12 }}>{label}</span>
-      <span style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 600, color: highlight ? "#b45309" : "var(--txt)", textAlign: "right" }}>{value}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,.03)" }}>
+      <span style={{ fontFamily: "var(--ui)", fontSize: 17, color: "var(--mut)", flexShrink: 0, marginRight: 12 }}>{label}</span>
+      <span style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 600, color: highlight ? "#b45309" : "var(--txt)", textAlign: "right" }}>{value}</span>
     </div>
   );
 }
@@ -760,67 +941,248 @@ function StatusPill({ children, color, bg, border }: { children: ReactNode; colo
 
 
 
+
+// --- ElementSVG: plan, elevation, section drawings ----------------------------
+
+function ElementSVG({ calcResult, accent }: { calcResult: import("@/types/calc").CalcResponse; accent: string }) {
+  const dp  = calcResult.detailingPayload as Record<string, unknown> | null | undefined;
+  const mod = calcResult.module ?? "";
+  const dim = (dp?.dimensions ?? {}) as Record<string, number>;
+  const ren = (dp?.reinforcement ?? {}) as Record<string, unknown>;
+
+  // RC Beam
+  if (mod.startsWith("rc_beam")) {
+    const b    = Number(dim.b_mm   ?? dim.b   ?? 300);
+    const h    = Number(dim.h_mm   ?? dim.h   ?? 500);
+    const d    = Number(dim.d_mm   ?? dim.d   ?? 450);
+    const span = Number(dim.span_m ?? dim.span ?? 5);
+    const cover = Number(dim.cover ?? dim.cover_mm ?? 25);
+    const asReq = Number(ren.as_design_mm2 ?? ren.As_design ?? 500);
+
+    // Estimate bar layout
+    const barDia   = asReq > 1200 ? 25 : asReq > 600 ? 20 : 16;
+    const nBars    = Math.max(2, Math.round(asReq / (Math.PI * barDia * barDia / 4)));
+    const svgW     = 320; const svgH = 220;
+    const scaleX   = (svgW - 60) / span;   // px per m
+    const spanPx   = span * scaleX;
+    const ox       = 30; const oy = 30;
+    const bPx      = Math.min(b * 0.35, 80); const hPx = Math.min(h * 0.35, 130);
+
+    // Cross-section SVG (centred)
+    const csW = 200; const csH = 200;
+    const csX = (csW - bPx) / 2; const csY = (csH - hPx) / 2;
+    const covPx = Math.max(5, cover * (bPx / b));
+    const rowY  = csY + hPx - covPx - barDia * 0.35 / 2;
+    const barSpacing = nBars > 1 ? (bPx - 2 * covPx) / (nBars - 1) : 0;
+
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        {/* Elevation */}
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Elevation</div>
+          <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`} style={{ display: "block" }}>
+            {/* Beam rectangle */}
+            <rect x={ox} y={oy} width={spanPx} height={hPx * 0.35} fill={`${accent}18`} stroke={accent} strokeWidth={1.5} rx={2} />
+            {/* Left support triangle */}
+            <polygon points={`${ox},${oy + hPx * 0.35} ${ox - 12},${oy + hPx * 0.35 + 16} ${ox + 12},${oy + hPx * 0.35 + 16}`} fill={`${accent}40`} stroke={accent} strokeWidth={1} />
+            {/* Right support circle on roller */}
+            <circle cx={ox + spanPx} cy={oy + hPx * 0.35 + 8} r={8} fill="none" stroke={accent} strokeWidth={1} />
+            <line x1={ox + spanPx - 14} y1={oy + hPx * 0.35 + 16} x2={ox + spanPx + 14} y2={oy + hPx * 0.35 + 16} stroke={accent} strokeWidth={1} />
+            {/* Span dimension line */}
+            <line x1={ox} y1={oy + hPx * 0.35 + 34} x2={ox + spanPx} y2={oy + hPx * 0.35 + 34} stroke="#888" strokeWidth={0.8} strokeDasharray="3 2" />
+            <text x={ox + spanPx / 2} y={oy + hPx * 0.35 + 48} textAnchor="middle" fontFamily="var(--mono)" fontSize={11} fill="#555">L = {span} m</text>
+            {/* Depth label */}
+            <text x={ox + spanPx + 14} y={oy + hPx * 0.18} fontFamily="var(--mono)" fontSize={10} fill="#555">h={h}mm</text>
+          </svg>
+        </div>
+
+        {/* Cross-section */}
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Cross-Section</div>
+          <svg width="100%" viewBox={`0 0 ${csW} ${csH}`} style={{ display: "block" }}>
+            {/* Section rectangle */}
+            <rect x={csX} y={csY} width={bPx} height={hPx} fill={`${accent}12`} stroke={accent} strokeWidth={1.5} />
+            {/* Cover dashed line */}
+            <rect x={csX + covPx} y={csY + covPx} width={bPx - 2*covPx} height={hPx - 2*covPx} fill="none" stroke="#bbb" strokeWidth={0.7} strokeDasharray="3 2" />
+            {/* Tension bars at bottom */}
+            {Array.from({ length: nBars }, (_, j) => {
+              const cx = nBars === 1 ? csX + bPx / 2 : csX + covPx + j * barSpacing;
+              return <circle key={j} cx={cx} cy={rowY} r={Math.max(3, barDia * 0.18)} fill={accent} stroke="#fff" strokeWidth={0.8} />;
+            })}
+            {/* Width dimension */}
+            <line x1={csX} y1={csY + hPx + 10} x2={csX + bPx} y2={csY + hPx + 10} stroke="#888" strokeWidth={0.8} />
+            <text x={csX + bPx/2} y={csY + hPx + 22} textAnchor="middle" fontFamily="var(--mono)" fontSize={10} fill="#555">b={b}mm</text>
+            {/* Height dimension */}
+            <line x1={csX - 10} y1={csY} x2={csX - 10} y2={csY + hPx} stroke="#888" strokeWidth={0.8} />
+            <text x={csX - 18} y={csY + hPx/2} textAnchor="middle" fontFamily="var(--mono)" fontSize={10} fill="#555" transform={`rotate(-90,${csX-18},${csY+hPx/2})`}>h={h}mm</text>
+            {/* Bar label */}
+            <text x={csW/2} y={csH - 4} textAnchor="middle" fontFamily="var(--mono)" fontSize={10} fill={accent}>{nBars}T{barDia} ({Math.round(asReq)} mm\u00B2)</text>
+          </svg>
+        </div>
+
+        {/* Plan (top view) */}
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Plan View</div>
+          <svg width="100%" viewBox={`0 0 ${svgW} 120`} style={{ display: "block" }}>
+            {/* Top view beam (width b × span) */}
+            <rect x={ox} y={30} width={spanPx} height={bPx * 0.3} fill={`${accent}18`} stroke={accent} strokeWidth={1.5} rx={2} />
+            {/* Tension bars visible in plan */}
+            {Array.from({ length: nBars }, (_, j) => {
+              const yBar = 30 + (j < Math.floor(nBars/2) ? covPx * 0.15 : bPx * 0.3 - covPx * 0.15);
+              return <line key={j} x1={ox + 4} y1={yBar} x2={ox + spanPx - 4} y2={yBar} stroke={accent} strokeWidth={1} strokeDasharray={j >= Math.floor(nBars/2) ? "none" : "4 2"} />;
+            })}
+            {/* Span label */}
+            <text x={ox + spanPx/2} y={30 + bPx * 0.3 + 20} textAnchor="middle" fontFamily="var(--mono)" fontSize={11} fill="#555">L = {span} m</text>
+            <text x={ox + spanPx + 8} y={30 + bPx * 0.15} fontFamily="var(--mono)" fontSize={10} fill="#555">b</text>
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
+  // RC Slab
+  if (mod.startsWith("rc_slab")) {
+    const h   = Number(dim.thickness_h ?? dim.h_mm ?? dim.h ?? 200);
+    const lx  = Number(dim.lx_m ?? dim.span_x ?? dim.span_m ?? 4);
+    const ly  = Number(dim.ly_m ?? dim.span_y ?? lx * 1.25);
+    const cover = Number(dim.cover ?? 25);
+    const svgW = 260; const svgH = 200;
+    const sx = Math.min((svgW - 60) / lx, 40);
+    const pW = lx * sx; const pH = ly * Math.min(sx, 30);
+
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Plan</div>
+          <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`} style={{ display: "block" }}>
+            <rect x={30} y={20} width={pW} height={pH} fill={`${accent}14`} stroke={accent} strokeWidth={1.5} />
+            {/* Mesh lines x-dir */}
+            {Array.from({ length: 5 }, (_, i) => <line key={`x${i}`} x1={30} y1={20 + (i+1) * pH/6} x2={30 + pW} y2={20 + (i+1)*pH/6} stroke={accent} strokeWidth={0.5} strokeDasharray="3 3" />)}
+            {/* Mesh lines y-dir */}
+            {Array.from({ length: 5 }, (_, i) => <line key={`y${i}`} x1={30 + (i+1)*pW/6} y1={20} x2={30 + (i+1)*pW/6} y2={20 + pH} stroke={`${accent}80`} strokeWidth={0.5} strokeDasharray="3 3" />)}
+            <text x={30 + pW/2} y={20 + pH + 18} textAnchor="middle" fontFamily="var(--mono)" fontSize={11} fill="#555">lx = {lx} m</text>
+            <text x={30 + pW + 14} y={20 + pH/2} fontFamily="var(--mono)" fontSize={11} fill="#555">ly = {ly.toFixed(1)} m</text>
+          </svg>
+        </div>
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Section</div>
+          <svg width="100%" viewBox="0 0 200 160" style={{ display: "block" }}>
+            <rect x={30} y={50} width={140} height={Math.min(h * 0.2, 60)} fill={`${accent}14`} stroke={accent} strokeWidth={1.5} />
+            <line x1={44} y1={50 + Math.min(h*0.2,60) - 8} x2={156} y2={50 + Math.min(h*0.2,60) - 8} stroke={accent} strokeWidth={1.5} strokeDasharray="6 2" />
+            <text x={100} y={50 + Math.min(h*0.2,60) + 18} textAnchor="middle" fontFamily="var(--mono)" fontSize={11} fill="#555">h = {h} mm</text>
+            <line x1={168} y1={50} x2={168} y2={50 + Math.min(h*0.2,60)} stroke="#888" strokeWidth={0.8} />
+            <text x={176} y={50 + Math.min(h*0.2,60)/2} fontFamily="var(--mono)" fontSize={10} fill="#555" transform={`rotate(90,176,${50+Math.min(h*0.2,60)/2})`}>h</text>
+          </svg>
+        </div>
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Info</div>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.8, color: "var(--txt)" }}>
+            <div>h = {h} mm</div>
+            <div>lx = {lx} m</div>
+            <div>ly = {ly.toFixed(1)} m</div>
+            <div>Cover = {cover} mm</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Steel Beam — I-section
+  if (mod.startsWith("steel_beam") || mod.startsWith("steel_column")) {
+    const isColumn = mod.startsWith("steel_column");
+    const secLabel = String((dp as Record<string, unknown>)?.section ?? "Universal Section");
+    const D = 300; const B = 180; const tf = 14; const tw = 9;
+    const svgH = 240; const svgW = 240;
+    const cx = svgW/2; const cy = svgH/2;
+
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, textAlign: "center", gridColumn: "1/3" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".5px" }}>Cross-Section ({isColumn ? "H" : "I"}-Profile)</div>
+          <svg width="100%" viewBox={`0 0 ${svgW} ${svgH}`} style={{ display: "block" }}>
+            {/* Top flange */}
+            <rect x={cx - B/2} y={cy - D/2} width={B} height={tf} fill={`${accent}30`} stroke={accent} strokeWidth={1.5} />
+            {/* Web */}
+            <rect x={cx - tw/2} y={cy - D/2 + tf} width={tw} height={D - 2*tf} fill={`${accent}20`} stroke={accent} strokeWidth={1} />
+            {/* Bottom flange */}
+            <rect x={cx - B/2} y={cy + D/2 - tf} width={B} height={tf} fill={`${accent}30`} stroke={accent} strokeWidth={1.5} />
+            {/* Width dimension */}
+            <line x1={cx - B/2} y1={cy + D/2 + 12} x2={cx + B/2} y2={cy + D/2 + 12} stroke="#888" strokeWidth={0.8} />
+            <text x={cx} y={cy + D/2 + 24} textAnchor="middle" fontFamily="var(--mono)" fontSize={10} fill="#555">B = {B} mm</text>
+            {/* Depth dimension */}
+            <line x1={cx + B/2 + 12} y1={cy - D/2} x2={cx + B/2 + 12} y2={cy + D/2} stroke="#888" strokeWidth={0.8} />
+            <text x={cx + B/2 + 22} y={cy} textAnchor="middle" fontFamily="var(--mono)" fontSize={10} fill="#555" transform={`rotate(90,${cx+B/2+22},${cy})`}>D = {D} mm</text>
+          </svg>
+        </div>
+        <div style={{ background: "#f9f7f4", borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".5px" }}>Section</div>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700, color: accent, textAlign: "center", lineHeight: 1.8 }}>{secLabel}</div>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--mut)", marginTop: 4 }}>{isColumn ? "Universal Column" : "Universal Beam"}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback — generic placeholder
+  return (
+    <div style={{ padding: "28px 18px", background: "#f9f7f4", borderRadius: 10, textAlign: "center" }}>
+      <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--mut)" }}>Detailing drawings will be available once geometry is fully defined.</div>
+    </div>
+  );
+}
 // --- Appendix A � Calculation steps block ------------------------------------
 
 function CalcStepsBlock({ steps, accent }: { steps: CalcStep[]; accent: string }) {
   if (steps.length === 0) {
     return (
-      <div style={{ padding: "28px 18px", textAlign: "center", fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)" }}>
+      <div style={{ padding: "28px 18px", textAlign: "center", fontFamily: "var(--mono)", fontSize: 17, color: "var(--dim)" }}>
         No calculation steps recorded.
       </div>
     );
   }
 
-  const fBg  = `${accent}0d`;
-  const fBdr = `${accent}38`;
-
   return (
-    <div style={{ padding: "10px 16px 16px" }}>
+    <div style={{ padding: "10px 16px 20px" }}>
       {steps.map((step, i) => (
-        <div key={i} style={{ border: `1px solid ${fBdr}`, borderRadius: 9, overflow: "hidden", boxShadow: "0 1px 5px rgba(0,0,0,.05)", marginBottom: 10 }}>
+        <div key={i} style={{ paddingLeft: 16, borderLeft: `3px solid ${accent}50`, marginBottom: 20 }}>
           {/* Step header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 13px", background: `linear-gradient(90deg,${accent}18,${accent}06)`, borderBottom: `1px solid ${fBdr}` }}>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--mono)", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div style={{ width: 24, height: 24, borderRadius: "50%", background: `${accent}22`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--mono)", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
               {String(i + 1).padStart(2, "0")}
             </div>
-            <span style={{ fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, color: accent, flex: 1 }}>{step.label}</span>
+            <span style={{ fontFamily: "var(--ui)", fontSize: 17, fontWeight: 700, color: "var(--txt)", flex: 1 }}>{step.label}</span>
             {step.clause && (
-              <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "#fff", background: accent, padding: "2px 8px", borderRadius: 10, flexShrink: 0 }}>{step.clause}</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: accent, border: `1px solid ${accent}50`, padding: "1px 7px", borderRadius: 10, flexShrink: 0 }}>{step.clause}</span>
             )}
           </div>
 
           {/* Formula */}
           {step.expression && (
-            <div style={{ padding: "8px 13px", background: fBg, borderBottom: `1px solid ${fBdr}` }}>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 5 }}>Formula / Substitution:</div>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: accent, background: "rgba(255,255,255,.7)", border: `1px solid ${fBdr}`, borderLeft: `4px solid ${accent}`, padding: "7px 11px", borderRadius: 5, lineHeight: 1.7, wordBreak: "break-word" }}>
+            <div style={{ marginBottom: 6, paddingLeft: 34 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 3 }}>Substitution:</div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 16, color: accent, borderLeft: `3px solid ${accent}40`, paddingLeft: 10, lineHeight: 1.7, wordBreak: "break-word" }}>
                 = &nbsp;{step.expression}
               </div>
             </div>
           )}
 
           {/* Result */}
-          <div style={{ padding: "8px 13px", background: `${accent}07`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".7px" }}>Result:</span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              {step.value != null ? (
-                <>
-                  <span style={{ fontFamily: "var(--mono)", fontSize: 18, fontWeight: 900, color: "var(--txt)" }}>
-                    {typeof step.value === "number" && !Number.isInteger(step.value) ? step.value.toFixed(4) : step.value}
-                  </span>
-                  {step.unit && <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: accent, fontWeight: 700 }}>{step.unit}</span>}
-                </>
-              ) : <span style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--dim)" }}>�</span>}
-            </div>
+          <div style={{ paddingLeft: 34, display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 13, fontWeight: 700, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".6px" }}>Result:</span>
+            {step.value != null ? (
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 22, fontWeight: 900, color: "var(--txt)" }}>
+                  {typeof step.value === "number" && !Number.isInteger(step.value) ? step.value.toFixed(4) : step.value}
+                </span>
+                {step.unit && <span style={{ fontFamily: "var(--mono)", fontSize: 16, color: accent, fontWeight: 700 }}>{step.unit}</span>}
+              </div>
+            ) : <span style={{ fontFamily: "var(--mono)", fontSize: 17, color: "var(--dim)" }}>\u2014</span>}
           </div>
         </div>
       ))}
     </div>
   );
 }
-
-
-// --- Save dialog (bottom sheet) ---------------------------------------------
 
 const EMPTY_INFO: ProjectInfo = { firmName: "", projectName: "", refId: "", designEngineer: "", approvingEngineer: "" };
 

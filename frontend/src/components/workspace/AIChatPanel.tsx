@@ -8,6 +8,7 @@ import type { CalcRequest } from "@/types/calc";
 import InlineResultCard from "./InlineResultCard";
 import { MODULE_LABELS } from "./InlineResultCard";
 
+
 // --- Element categories ---
 
 type SubType = { name: string; desc: string; prompt: string };
@@ -155,7 +156,8 @@ export default function AIChatPanel() {
   // Fetch which AI provider is active
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
-    fetch(`${apiUrl}/api/v1/ai/status`)
+    const authKey = process.env.NEXT_PUBLIC_API_AUTH_KEY ?? "";
+    fetch(`${apiUrl}/api/v1/ai/status`, { headers: { "X-API-Key": authKey } })
       .then(r => r.json())
       .then((d: { provider?: string; model?: string }) => setAiProvider(d.provider ?? ""))
       .catch(() => {});
@@ -254,21 +256,23 @@ export default function AIChatPanel() {
 
       if (res.ok) {
         const data = await res.json() as { module: string; extracted: Record<string, unknown>; summary: string; provider?: string; model?: string };
+        const d = data as Record<string, unknown>;
+
         setExtractedParams({ ...data.extracted, module: data.module } as unknown as import("@/types/calc").ExtractedParams);
-        setDesignElementId(generateElemId(data.module));
-        addMessage({
-          role: "assistant",
-          content: `__EXTRACTED__${JSON.stringify({
-            module: data.module,
-            extracted: data.extracted,
-            summary: data.summary ?? "Parameters extracted. Please confirm to proceed.",
-            confidence: (data as Record<string, unknown>).confidence ?? "high",
-            missing: (data as Record<string, unknown>).missing ?? [],
-            provider: data.provider ?? "",
-            model: data.model ?? "",
-          })}`,
-        });
-        setPhase(3);
+          setDesignElementId(generateElemId(data.module));
+          addMessage({
+            role: "assistant",
+            content: `__EXTRACTED__${JSON.stringify({
+              module: data.module,
+              extracted: data.extracted,
+              summary: data.summary ?? "Parameters extracted. Please confirm to proceed.",
+              confidence: d.confidence ?? "high",
+              missing: d.missing ?? [],
+              provider: data.provider ?? "",
+              model: data.model ?? "",
+            })}`,
+          });
+          setPhase(3);
       } else {
         // AI endpoint not yet live — show helpful message
         addMessage({

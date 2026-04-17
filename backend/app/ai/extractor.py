@@ -1,6 +1,6 @@
 """
 AI parameter extraction.
-Primary: Anthropic Claude  |  Fallback: DeepSeek (OpenAI-compatible API)
+Primary: DeepSeek  |  Fallback: Anthropic Claude
 """
 from __future__ import annotations
 

@@ -10,6 +10,8 @@ from flask_cors import CORS
 
 from app.db import runs_repo
 from app.ai import extractor as ai_extractor
+from app.api.v1.auth import auth_bp
+from app.api.v1.payment import payment_bp
 
 # ── Module registry ───────────────────────────────────────────────────────────
 # Maps module identifier strings to importable Python paths.
@@ -56,10 +58,17 @@ def create_app() -> Flask:
     CORS(
         app,
         origins=_origins,
-        allow_headers=["Content-Type", "X-API-Key"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
         methods=["GET", "POST", "OPTIONS"],
         max_age=86400,
     )
+
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(payment_bp)
+
+    # Routes that are always public (no X-API-Key required)
+    _PUBLIC_PREFIXES = ("/api/v1/auth/", "/api/v1/payment/webhook", "/health")
 
     @app.before_request
     def enforce_api_key():
@@ -69,6 +78,9 @@ def create_app() -> Flask:
         if not api_auth_key:
             return None
         if not request.path.startswith("/api/v1/"):
+            return None
+        # Auth and payment webhook are always public
+        if any(request.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return None
         provided = request.headers.get("X-API-Key", "").strip()
         if provided == api_auth_key:
@@ -265,6 +277,7 @@ def create_app() -> Flask:
                 "provider":         result.get("_provider_used", ""),
                 "model":            result.get("_model_used", ""),
             }), 200
+
         except ValueError as e:
             return jsonify({
                 "status": "error",

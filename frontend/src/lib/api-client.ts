@@ -5,6 +5,12 @@ const BASE_URL =
 const API_AUTH_KEY =
   process.env.NEXT_PUBLIC_API_AUTH_KEY?.trim() ?? "";
 
+/** Get the stored JWT token from localStorage (safe in SSR — returns "" on server). */
+function getStoredToken(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("ssad_token") ?? "";
+}
+
 export class ApiError extends Error {
   status: number;
   payload: unknown;
@@ -27,6 +33,10 @@ async function fetchJson<T>(
   }
   if (API_AUTH_KEY && !mergedHeaders.has("X-API-Key")) {
     mergedHeaders.set("X-API-Key", API_AUTH_KEY);
+  }
+  const jwt = getStoredToken();
+  if (jwt && !mergedHeaders.has("Authorization")) {
+    mergedHeaders.set("Authorization", `Bearer ${jwt}`);
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -53,6 +63,8 @@ export async function runCalc(
   const mergedHeaders = new Headers();
   mergedHeaders.set("Content-Type", "application/json");
   if (API_AUTH_KEY) mergedHeaders.set("X-API-Key", API_AUTH_KEY);
+  const jwt = getStoredToken();
+  if (jwt) mergedHeaders.set("Authorization", `Bearer ${jwt}`);
 
   const res = await fetch(`${BASE_URL}/api/v1/calc`, {
     method: "POST",

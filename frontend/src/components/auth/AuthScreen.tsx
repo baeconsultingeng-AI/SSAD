@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, AuthApiError } from "@/context/AuthContext";
 
-type Modal = "login" | "register" | null;
+type Modal = "login" | "register" | "check_email" | null;
 
 // ─── Animated canvas: neural net + ephemeral mini frames ───
 // ─── 3-D isometric 6-storey frame + neural net ────────────
@@ -301,57 +301,89 @@ function TierRow({ icon, label, items, highlight = false }: {
 
 // ─── Main ─────────────────────────────────────────────────
 export default function AuthScreen() {
-  const { login, loginLocal, loginAsGuest } = useAuth();
+  const { login, register, resendVerification, loginAsGuest } = useAuth();
   const [modal, setModal] = useState<Modal>(null);
 
   // Login state
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginEmail, setLoginEmail]             = useState("");
+  const [loginPassword, setLoginPassword]       = useState("");
+  const [loginError, setLoginError]             = useState<string | null>(null);
+  const [loginLoading, setLoginLoading]         = useState(false);
+  const [loginNotVerified, setLoginNotVerified] = useState(false);
+  const [resendLoading, setResendLoading]       = useState(false);
+  const [resendDone, setResendDone]             = useState(false);
 
   // Register state
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regFirm, setRegFirm] = useState("");
-  const [regRole, setRegRole] = useState("");
-  const [regCountry, setRegCountry] = useState("");
-  const [regAgree, setRegAgree] = useState(false);
-  const [regError, setRegError] = useState<string | null>(null);
-  const [regLoading, setRegLoading] = useState(false);
+  const [regName, setRegName]           = useState("");
+  const [regEmail, setRegEmail]         = useState("");
+  const [regPassword, setRegPassword]   = useState("");
+  const [regFirm, setRegFirm]           = useState("");
+  const [regRole, setRegRole]           = useState("");
+  const [regCountry, setRegCountry]     = useState("");
+  const [regAgree, setRegAgree]         = useState(false);
+  const [regError, setRegError]         = useState<string | null>(null);
+  const [regLoading, setRegLoading]     = useState(false);
+  const [checkEmail, setCheckEmail]     = useState(""); // email shown in check_email modal
 
   const handleLogin = async () => {
     if (!loginEmail.trim()) { setLoginError("Please enter your email address."); return; }
+    if (!loginPassword.trim()) { setLoginError("Please enter your password."); return; }
     setLoginError(null);
+    setLoginNotVerified(false);
+    setResendDone(false);
     setLoginLoading(true);
     try {
-      await login(loginEmail.trim(), "");
-    } catch {
-      const mockUser = {
-        id: `u_${Date.now()}`, email: loginEmail.trim(), fullName: "",
-        tier: "trial" as const,
-        trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-      loginLocal(mockUser);
+      await login(loginEmail.trim(), loginPassword);
+    } catch (err) {
+      if (err instanceof AuthApiError && err.code === "EMAIL_NOT_VERIFIED") {
+        setLoginNotVerified(true);
+        setLoginError("Your email address has not been verified. Please check your inbox.");
+      } else {
+        setLoginError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      }
     } finally {
       setLoginLoading(false);
     }
   };
 
-  const handleRegister = () => {
-    if (!regName.trim()) { setRegError("Please enter your full name."); return; }
+  const handleResendFromLogin = async () => {
+    if (!loginEmail.trim()) return;
+    setResendLoading(true);
+    try {
+      await resendVerification(loginEmail.trim());
+      setResendDone(true);
+    } catch {
+      // swallow — the server always returns 200 for resend
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!regName.trim())  { setRegError("Please enter your full name."); return; }
     if (!regEmail.trim() || !regEmail.includes("@")) { setRegError("Please enter a valid email."); return; }
+    if (regPassword.length < 8) { setRegError("Password must be at least 8 characters."); return; }
     if (!regRole) { setRegError("Please select your role."); return; }
     if (!regAgree) { setRegError("Please agree to the Terms of Use."); return; }
     setRegError(null);
     setRegLoading(true);
-    setTimeout(() => {
-      loginLocal({
-        id: `u_${Date.now()}`, email: regEmail.trim(), fullName: regName.trim(),
-        tier: "trial" as const,
-        trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    try {
+      await register({
+        email: regEmail.trim(),
+        password: regPassword,
+        full_name: regName.trim(),
+        firm: regFirm.trim(),
+        role: regRole,
+        country: regCountry.trim(),
       });
+      // Success — show "check your email" panel
+      setCheckEmail(regEmail.trim());
+      setModal("check_email");
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : "Registration failed. Please try again.");
+    } finally {
       setRegLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -532,10 +564,29 @@ export default function AuthScreen() {
           </div>
 
           <AuthInput id="login-email" type="email" label="Email Address" placeholder="engineer@firm.com" value={loginEmail} onChange={setLoginEmail} required />
+          <AuthInput id="login-password" type="password" label="Password" placeholder="••••••••" value={loginPassword} onChange={setLoginPassword} required />
 
           {loginError && (
-            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#c0392b", background: "rgba(192,57,43,.07)", border: "1px solid rgba(192,57,43,.2)", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#c0392b", background: "rgba(192,57,43,.07)", border: "1px solid rgba(192,57,43,.2)", borderRadius: 8, padding: "7px 10px", marginBottom: 8 }}>
               {loginError}
+            </div>
+          )}
+
+          {loginNotVerified && (
+            <div style={{ marginBottom: 12 }}>
+              {resendDone ? (
+                <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#007a5e", background: "rgba(0,122,94,.07)", border: "1px solid rgba(0,122,94,.25)", borderRadius: 8, padding: "7px 10px" }}>
+                  ✓ Verification email sent — please check your inbox.
+                </div>
+              ) : (
+                <button
+                  onClick={() => void handleResendFromLogin()}
+                  disabled={resendLoading}
+                  style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "#1a4a8a", background: "rgba(26,74,138,.07)", border: "1px solid rgba(26,74,138,.25)", borderRadius: 8, padding: "7px 12px", cursor: resendLoading ? "not-allowed" : "pointer", opacity: resendLoading ? .6 : 1 }}
+                >
+                  {resendLoading ? "Sending…" : "Resend verification email →"}
+                </button>
+              )}
             </div>
           )}
 
@@ -572,6 +623,7 @@ export default function AuthScreen() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-name" label="Full Name" placeholder="Engr. Amara Osei" value={regName} onChange={setRegName} required /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-email" type="email" label="Email Address" placeholder="engineer@firm.com" value={regEmail} onChange={setRegEmail} required /></div>
+            <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-password" type="password" label="Password (min 8 chars)" placeholder="••••••••" value={regPassword} onChange={setRegPassword} required /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-firm" label="Firm / Organisation" placeholder="BAE Consulting Engineers" value={regFirm} onChange={setRegFirm} /></div>
           </div>
 
@@ -606,7 +658,7 @@ export default function AuthScreen() {
           )}
 
           <button
-            onClick={handleRegister}
+            onClick={() => void handleRegister()}
             disabled={regLoading}
             style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "linear-gradient(135deg,#1a4a8a,#2563b0)", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: regLoading ? "not-allowed" : "pointer", opacity: regLoading ? .7 : 1 }}
           >
@@ -616,6 +668,57 @@ export default function AuthScreen() {
           <div style={{ textAlign: "center", marginTop: 12, fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72" }}>
             Already registered?{" "}
             <span onClick={() => setModal("login")} style={{ color: "#1a4a8a", fontWeight: 700, cursor: "pointer" }}>Sign in</span>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── CHECK EMAIL MODAL ── */}
+      {modal === "check_email" && (
+        <Modal onClose={() => setModal(null)}>
+          <div style={{ textAlign: "center", padding: "8px 0" }}>
+            {/* Envelope icon */}
+            <div style={{ fontSize: 52, marginBottom: 14 }}>📬</div>
+
+            <div style={{ fontFamily: "var(--ser)", fontSize: 20, fontWeight: 700, color: "#1a1410", marginBottom: 8 }}>
+              Check your inbox
+            </div>
+            <div style={{ fontFamily: "var(--ui)", fontSize: 13, color: "#5c4f42", lineHeight: 1.6, marginBottom: 6 }}>
+              We sent a verification link to
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "#1a4a8a", marginBottom: 18, wordBreak: "break-all" }}>
+              {checkEmail}
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72", lineHeight: 1.7, marginBottom: 24 }}>
+              Click the link in the email to activate your account.<br/>
+              The link expires in 24 hours.
+            </div>
+
+            {/* Resend */}
+            {resendDone ? (
+              <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#007a5e", background: "rgba(0,122,94,.07)", border: "1px solid rgba(0,122,94,.25)", borderRadius: 8, padding: "8px 12px", marginBottom: 16 }}>
+                ✓ New verification email sent!
+              </div>
+            ) : (
+              <button
+                onClick={async () => {
+                  setResendLoading(true);
+                  try { await resendVerification(checkEmail); setResendDone(true); }
+                  catch { /* server always 200s */ }
+                  finally { setResendLoading(false); }
+                }}
+                disabled={resendLoading}
+                style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "#1a4a8a", background: "rgba(26,74,138,.07)", border: "1px solid rgba(26,74,138,.25)", borderRadius: 8, padding: "8px 16px", cursor: resendLoading ? "not-allowed" : "pointer", opacity: resendLoading ? .6 : 1, marginBottom: 16 }}
+              >
+                {resendLoading ? "Sending…" : "Resend verification email"}
+              </button>
+            )}
+
+            <button
+              onClick={() => { setModal("login"); }}
+              style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "#1a4a8a", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+            >
+              Back to Sign In
+            </button>
           </div>
         </Modal>
       )}
