@@ -301,57 +301,62 @@ function TierRow({ icon, label, items, highlight = false }: {
 
 // ─── Main ─────────────────────────────────────────────────
 export default function AuthScreen() {
-  const { login, loginLocal, loginAsGuest } = useAuth();
+  const { login, register, loginAsGuest } = useAuth();
   const [modal, setModal] = useState<Modal>(null);
 
   // Login state
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginEmail, setLoginEmail]       = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError]       = useState<string | null>(null);
+  const [loginLoading, setLoginLoading]   = useState(false);
 
   // Register state
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regFirm, setRegFirm] = useState("");
-  const [regRole, setRegRole] = useState("");
+  const [regName, setRegName]       = useState("");
+  const [regEmail, setRegEmail]     = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regFirm, setRegFirm]       = useState("");
+  const [regRole, setRegRole]       = useState("");
   const [regCountry, setRegCountry] = useState("");
-  const [regAgree, setRegAgree] = useState(false);
-  const [regError, setRegError] = useState<string | null>(null);
+  const [regAgree, setRegAgree]     = useState(false);
+  const [regError, setRegError]     = useState<string | null>(null);
   const [regLoading, setRegLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!loginEmail.trim()) { setLoginError("Please enter your email address."); return; }
+    if (!loginPassword.trim()) { setLoginError("Please enter your password."); return; }
     setLoginError(null);
     setLoginLoading(true);
     try {
-      await login(loginEmail.trim(), "");
-    } catch {
-      const mockUser = {
-        id: `u_${Date.now()}`, email: loginEmail.trim(), fullName: "",
-        tier: "trial" as const,
-        trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-      loginLocal(mockUser);
+      await login(loginEmail.trim(), loginPassword);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {
       setLoginLoading(false);
     }
   };
 
-  const handleRegister = () => {
-    if (!regName.trim()) { setRegError("Please enter your full name."); return; }
+  const handleRegister = async () => {
+    if (!regName.trim())  { setRegError("Please enter your full name."); return; }
     if (!regEmail.trim() || !regEmail.includes("@")) { setRegError("Please enter a valid email."); return; }
+    if (regPassword.length < 8) { setRegError("Password must be at least 8 characters."); return; }
     if (!regRole) { setRegError("Please select your role."); return; }
     if (!regAgree) { setRegError("Please agree to the Terms of Use."); return; }
     setRegError(null);
     setRegLoading(true);
-    setTimeout(() => {
-      loginLocal({
-        id: `u_${Date.now()}`, email: regEmail.trim(), fullName: regName.trim(),
-        tier: "trial" as const,
-        trialExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    try {
+      await register({
+        email: regEmail.trim(),
+        password: regPassword,
+        full_name: regName.trim(),
+        firm: regFirm.trim(),
+        role: regRole,
+        country: regCountry.trim(),
       });
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : "Registration failed. Please try again.");
+    } finally {
       setRegLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -532,6 +537,7 @@ export default function AuthScreen() {
           </div>
 
           <AuthInput id="login-email" type="email" label="Email Address" placeholder="engineer@firm.com" value={loginEmail} onChange={setLoginEmail} required />
+          <AuthInput id="login-password" type="password" label="Password" placeholder="••••••••" value={loginPassword} onChange={setLoginPassword} required />
 
           {loginError && (
             <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#c0392b", background: "rgba(192,57,43,.07)", border: "1px solid rgba(192,57,43,.2)", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
@@ -572,6 +578,7 @@ export default function AuthScreen() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-name" label="Full Name" placeholder="Engr. Amara Osei" value={regName} onChange={setRegName} required /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-email" type="email" label="Email Address" placeholder="engineer@firm.com" value={regEmail} onChange={setRegEmail} required /></div>
+            <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-password" type="password" label="Password (min 8 chars)" placeholder="••••••••" value={regPassword} onChange={setRegPassword} required /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-firm" label="Firm / Organisation" placeholder="BAE Consulting Engineers" value={regFirm} onChange={setRegFirm} /></div>
           </div>
 
@@ -606,7 +613,7 @@ export default function AuthScreen() {
           )}
 
           <button
-            onClick={handleRegister}
+            onClick={() => void handleRegister()}
             disabled={regLoading}
             style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "linear-gradient(135deg,#1a4a8a,#2563b0)", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: regLoading ? "not-allowed" : "pointer", opacity: regLoading ? .7 : 1 }}
           >

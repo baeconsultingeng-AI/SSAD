@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useAuth } from "@/context/AuthContext";
 import { loadProjects, type StoredProject } from "@/lib/calc-storage";
+import PaymentModal from "@/components/payment/PaymentModal";
 
 function SteelIcon() {
   return (
@@ -68,8 +69,9 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
   const { screen, goScreen, projectId, setActiveProject } = useWorkspace();
   const { user, logout } = useAuth();
 
-  const [projMenuOpen, setProjMenuOpen] = useState(false);
-  const [projects, setProjects] = useState<StoredProject[]>([]);
+  const [projMenuOpen, setProjMenuOpen]     = useState(false);
+  const [projects, setProjects]             = useState<StoredProject[]>([]);
+  const [paymentOpen, setPaymentOpen]       = useState(false);
   const projMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,6 +130,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", maxHeight: "100dvh", overflow: "hidden", background: "#0d1b2e" }}>
+      {paymentOpen && <PaymentModal onClose={() => setPaymentOpen(false)} />}
 
       {/* ── TOP BAR ── */}
       <div style={{
@@ -277,7 +280,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
             </div>
           )}
           <button
-            onClick={() => goScreen("upgrade")}
+            onClick={() => setPaymentOpen(true)}
             style={{
               background: "linear-gradient(135deg,rgba(200,150,12,.25),rgba(224,168,32,.18))",
               border: "1px solid rgba(200,150,12,.55)",
