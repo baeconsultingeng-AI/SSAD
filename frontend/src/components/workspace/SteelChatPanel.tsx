@@ -7,7 +7,7 @@ import { runCalc } from "@/lib/api-client";
 import type { CalcRequest } from "@/types/calc";
 import InlineResultCard from "./InlineResultCard";
 import { MODULE_LABELS } from "./InlineResultCard";
-import DualChoiceCard, { type DualChoicePayload } from "./DualChoiceCard";
+
 
 // â”€â”€â”€ Steel element categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -255,21 +255,7 @@ export default function SteelChatPanel() {
         const data = await res.json() as { module: string; extracted: Record<string, unknown>; summary: string; provider?: string; model?: string };
         const d = data as Record<string, unknown>;
 
-        if (d.requires_user_choice === true) {
-          setDesignElementId(generateElemId(data.module));
-          addMessage({
-            role: "assistant",
-            content: `__DUAL_CHOICE__${JSON.stringify({
-              module: data.module,
-              convergence: d.convergence as number,
-              divergent_fields: (d.divergent_fields ?? []) as DualChoicePayload["divergent_fields"],
-              deepseek_result: d.deepseek_result as DualChoicePayload["deepseek_result"],
-              claude_result: d.claude_result as DualChoicePayload["claude_result"],
-            } satisfies DualChoicePayload)}`,
-          });
-          setPhase(3);
-        } else {
-          setExtractedParams({ ...data.extracted, module: data.module } as unknown as import("@/types/calc").ExtractedParams);
+        setExtractedParams({ ...data.extracted, module: data.module } as unknown as import("@/types/calc").ExtractedParams);
           setDesignElementId(generateElemId(data.module));
           addMessage({
             role: "assistant",
@@ -284,7 +270,6 @@ export default function SteelChatPanel() {
             })}`,
           });
           setPhase(3);
-        }
       } else {
         addMessage({
           role: "assistant",
@@ -536,35 +521,6 @@ export default function SteelChatPanel() {
             )}
 
             {messages.map((m) => {
-              if (m.role === "assistant" && m.content.startsWith("__DUAL_CHOICE__")) {
-                let dualPayload: DualChoicePayload | null = null;
-                try { dualPayload = JSON.parse(m.content.replace(/^__DUAL_CHOICE__/, "")) as DualChoicePayload; } catch { /* ignore */ }
-                if (!dualPayload) return null;
-                const payload = dualPayload;
-                return (
-                  <DualChoiceCard
-                    key={m.id}
-                    content={m.content}
-                    elementId={designElementId}
-                    onChoose={({ provider, result }) => {
-                      setExtractedParams({ ...result.extracted, module: payload.module } as unknown as import("@/types/calc").ExtractedParams);
-                      addMessage({
-                        role: "assistant",
-                        content: `__EXTRACTED__${JSON.stringify({
-                          module: payload.module,
-                          extracted: result.extracted,
-                          summary: result.summary,
-                          confidence: result.confidence,
-                          missing: result.missing,
-                          provider,
-                          model: result.model,
-                        })}`,
-                      });
-                      setPhase(3);
-                    }}
-                  />
-                );
-              }
               if (m.role === "assistant" && m.content.startsWith("__EXTRACTED__")) {
                 return <SteelExtractedCard key={m.id} content={m.content} elementId={designElementId} autoEdit={redesignMode} onConfirm={(env) => { setRedesignMode(false); void handleConfirm(env); }} onEdit={() => { clearChat(); setPhase(1); setPickerState("elements"); setSelectedElement(null); }} />;
               }
