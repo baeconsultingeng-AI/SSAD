@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, AuthApiError } from "@/context/AuthContext";
 
-type Modal = "login" | "register" | null;
+type Modal = "login" | "register" | "check_email" | null;
 
 // ─── Animated canvas: neural net + ephemeral mini frames ───
 // ─── 3-D isometric 6-storey frame + neural net ────────────
@@ -301,37 +301,61 @@ function TierRow({ icon, label, items, highlight = false }: {
 
 // ─── Main ─────────────────────────────────────────────────
 export default function AuthScreen() {
-  const { login, register, loginAsGuest } = useAuth();
+  const { login, register, resendVerification, loginAsGuest } = useAuth();
   const [modal, setModal] = useState<Modal>(null);
 
   // Login state
-  const [loginEmail, setLoginEmail]       = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError]       = useState<string | null>(null);
-  const [loginLoading, setLoginLoading]   = useState(false);
+  const [loginEmail, setLoginEmail]             = useState("");
+  const [loginPassword, setLoginPassword]       = useState("");
+  const [loginError, setLoginError]             = useState<string | null>(null);
+  const [loginLoading, setLoginLoading]         = useState(false);
+  const [loginNotVerified, setLoginNotVerified] = useState(false);
+  const [resendLoading, setResendLoading]       = useState(false);
+  const [resendDone, setResendDone]             = useState(false);
 
   // Register state
-  const [regName, setRegName]       = useState("");
-  const [regEmail, setRegEmail]     = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [regFirm, setRegFirm]       = useState("");
-  const [regRole, setRegRole]       = useState("");
-  const [regCountry, setRegCountry] = useState("");
-  const [regAgree, setRegAgree]     = useState(false);
-  const [regError, setRegError]     = useState<string | null>(null);
-  const [regLoading, setRegLoading] = useState(false);
+  const [regName, setRegName]           = useState("");
+  const [regEmail, setRegEmail]         = useState("");
+  const [regPassword, setRegPassword]   = useState("");
+  const [regFirm, setRegFirm]           = useState("");
+  const [regRole, setRegRole]           = useState("");
+  const [regCountry, setRegCountry]     = useState("");
+  const [regAgree, setRegAgree]         = useState(false);
+  const [regError, setRegError]         = useState<string | null>(null);
+  const [regLoading, setRegLoading]     = useState(false);
+  const [checkEmail, setCheckEmail]     = useState(""); // email shown in check_email modal
 
   const handleLogin = async () => {
     if (!loginEmail.trim()) { setLoginError("Please enter your email address."); return; }
     if (!loginPassword.trim()) { setLoginError("Please enter your password."); return; }
     setLoginError(null);
+    setLoginNotVerified(false);
+    setResendDone(false);
     setLoginLoading(true);
     try {
       await login(loginEmail.trim(), loginPassword);
     } catch (err) {
-      setLoginError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      if (err instanceof AuthApiError && err.code === "EMAIL_NOT_VERIFIED") {
+        setLoginNotVerified(true);
+        setLoginError("Your email address has not been verified. Please check your inbox.");
+      } else {
+        setLoginError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      }
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleResendFromLogin = async () => {
+    if (!loginEmail.trim()) return;
+    setResendLoading(true);
+    try {
+      await resendVerification(loginEmail.trim());
+      setResendDone(true);
+    } catch {
+      // swallow — the server always returns 200 for resend
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -352,6 +376,9 @@ export default function AuthScreen() {
         role: regRole,
         country: regCountry.trim(),
       });
+      // Success — show "check your email" panel
+      setCheckEmail(regEmail.trim());
+      setModal("check_email");
     } catch (err) {
       setRegError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     } finally {
@@ -540,8 +567,26 @@ export default function AuthScreen() {
           <AuthInput id="login-password" type="password" label="Password" placeholder="••••••••" value={loginPassword} onChange={setLoginPassword} required />
 
           {loginError && (
-            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#c0392b", background: "rgba(192,57,43,.07)", border: "1px solid rgba(192,57,43,.2)", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#c0392b", background: "rgba(192,57,43,.07)", border: "1px solid rgba(192,57,43,.2)", borderRadius: 8, padding: "7px 10px", marginBottom: 8 }}>
               {loginError}
+            </div>
+          )}
+
+          {loginNotVerified && (
+            <div style={{ marginBottom: 12 }}>
+              {resendDone ? (
+                <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#007a5e", background: "rgba(0,122,94,.07)", border: "1px solid rgba(0,122,94,.25)", borderRadius: 8, padding: "7px 10px" }}>
+                  ✓ Verification email sent — please check your inbox.
+                </div>
+              ) : (
+                <button
+                  onClick={() => void handleResendFromLogin()}
+                  disabled={resendLoading}
+                  style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "#1a4a8a", background: "rgba(26,74,138,.07)", border: "1px solid rgba(26,74,138,.25)", borderRadius: 8, padding: "7px 12px", cursor: resendLoading ? "not-allowed" : "pointer", opacity: resendLoading ? .6 : 1 }}
+                >
+                  {resendLoading ? "Sending…" : "Resend verification email →"}
+                </button>
+              )}
             </div>
           )}
 
@@ -623,6 +668,57 @@ export default function AuthScreen() {
           <div style={{ textAlign: "center", marginTop: 12, fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72" }}>
             Already registered?{" "}
             <span onClick={() => setModal("login")} style={{ color: "#1a4a8a", fontWeight: 700, cursor: "pointer" }}>Sign in</span>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── CHECK EMAIL MODAL ── */}
+      {modal === "check_email" && (
+        <Modal onClose={() => setModal(null)}>
+          <div style={{ textAlign: "center", padding: "8px 0" }}>
+            {/* Envelope icon */}
+            <div style={{ fontSize: 52, marginBottom: 14 }}>📬</div>
+
+            <div style={{ fontFamily: "var(--ser)", fontSize: 20, fontWeight: 700, color: "#1a1410", marginBottom: 8 }}>
+              Check your inbox
+            </div>
+            <div style={{ fontFamily: "var(--ui)", fontSize: 13, color: "#5c4f42", lineHeight: 1.6, marginBottom: 6 }}>
+              We sent a verification link to
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: "#1a4a8a", marginBottom: 18, wordBreak: "break-all" }}>
+              {checkEmail}
+            </div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#8a7d72", lineHeight: 1.7, marginBottom: 24 }}>
+              Click the link in the email to activate your account.<br/>
+              The link expires in 24 hours.
+            </div>
+
+            {/* Resend */}
+            {resendDone ? (
+              <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "#007a5e", background: "rgba(0,122,94,.07)", border: "1px solid rgba(0,122,94,.25)", borderRadius: 8, padding: "8px 12px", marginBottom: 16 }}>
+                ✓ New verification email sent!
+              </div>
+            ) : (
+              <button
+                onClick={async () => {
+                  setResendLoading(true);
+                  try { await resendVerification(checkEmail); setResendDone(true); }
+                  catch { /* server always 200s */ }
+                  finally { setResendLoading(false); }
+                }}
+                disabled={resendLoading}
+                style={{ fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700, color: "#1a4a8a", background: "rgba(26,74,138,.07)", border: "1px solid rgba(26,74,138,.25)", borderRadius: 8, padding: "8px 16px", cursor: resendLoading ? "not-allowed" : "pointer", opacity: resendLoading ? .6 : 1, marginBottom: 16 }}
+              >
+                {resendLoading ? "Sending…" : "Resend verification email"}
+              </button>
+            )}
+
+            <button
+              onClick={() => { setModal("login"); }}
+              style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: "#1a4a8a", color: "#fff", fontFamily: "var(--ui)", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+            >
+              Back to Sign In
+            </button>
           </div>
         </Modal>
       )}

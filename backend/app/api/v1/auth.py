@@ -1,13 +1,15 @@
 """
 app/api/v1/auth.py
 ───────────────────
-Authentication blueprint — register, login, me.
+Authentication blueprint.
 
 Endpoints
 ─────────
-POST /api/v1/auth/register   { email, password, full_name, firm, role, country }
-POST /api/v1/auth/login      { email, password }
-GET  /api/v1/auth/me         Authorization: Bearer <token>
+POST /api/v1/auth/register              { email, password, full_name, firm, role, country }
+POST /api/v1/auth/login                 { email, password }
+GET  /api/v1/auth/me                    Authorization: Bearer <token>
+GET  /api/v1/auth/verify-email          ?token=<verify_token>
+POST /api/v1/auth/resend-verification   { email }
 
 Tokens
 ──────
@@ -27,8 +29,12 @@ from app.db.auth_db import (
     create_user,
     get_user_by_email,
     get_user_by_id,
+    get_user_by_verify_token,
+    mark_email_verified,
+    refresh_verify_token,
     verify_password,
 )
+from app.utils.email import send_verification_email
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 
@@ -63,19 +69,31 @@ def _bearer_token() -> str | None:
     return None
 
 
+def _token_is_expired(user: dict) -> bool:
+    expires = user.get("verify_token_expires_at")
+    if not expires:
+        return True
+    try:
+        expiry_dt = datetime.fromisoformat(expires)
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+        return expiry_dt < datetime.now(timezone.utc)
+    except ValueError:
+        return True
+
+
 # ── POST /api/v1/auth/register ────────────────────────────────────────────────
 
 @auth_bp.post("/register")
 def register():
     body: dict = request.get_json(silent=True) or {}
-    email    = (body.get("email") or "").strip().lower()
-    password = (body.get("password") or "").strip()
+    email     = (body.get("email") or "").strip().lower()
+    password  = (body.get("password") or "").strip()
     full_name = (body.get("full_name") or "").strip()
-    firm     = (body.get("firm") or "").strip()
-    role     = (body.get("role") or "").strip()
-    country  = (body.get("country") or "").strip()
+    firm      = (body.get("firm") or "").strip()
+    role      = (body.get("role") or "").strip()
+    country   = (body.get("country") or "").strip()
 
-    # Validation
     if not email or "@" not in email:
         return jsonify({"error": "Valid email is required."}), 400
     if len(password) < 8:
@@ -83,7 +101,6 @@ def register():
     if not full_name:
         return jsonify({"error": "Full name is required."}), 400
 
-    # Duplicate check
     if get_user_by_email(email):
         return jsonify({"error": "An account with this email already exists."}), 409
 
@@ -95,8 +112,14 @@ def register():
         role=role,
         country=country,
     )
-    token = _make_token(user["id"])
-    return jsonify({"token": token, "user": _safe_user(user)}), 201
+
+    # Send verification email (non-blocking: failure is logged, not raised)
+    send_verification_email(email, user.get("full_name", ""), user["verify_token"])
+
+    return jsonify({
+        "message": "Account created. Please check your inbox to verify your email.",
+        "email": email,
+    }), 201
 
 
 # ── POST /api/v1/auth/login ───────────────────────────────────────────────────
@@ -113,6 +136,12 @@ def login():
     user = get_user_by_email(email)
     if not user or not verify_password(password, user["password_hash"]):
         return jsonify({"error": "Invalid email or password."}), 401
+
+    if not user.get("email_verified"):
+        return jsonify({
+            "error": "Email not verified. Please check your inbox for the verification link.",
+            "code":  "EMAIL_NOT_VERIFIED",
+        }), 403
 
     token = _make_token(user["id"])
     return jsonify({"token": token, "user": _safe_user(user)}), 200
@@ -135,3 +164,51 @@ def me():
         return jsonify({"error": "User not found."}), 404
 
     return jsonify({"user": _safe_user(user)}), 200
+
+
+# ── GET /api/v1/auth/verify-email ────────────────────────────────────────────
+
+@auth_bp.get("/verify-email")
+def verify_email():
+    token = (request.args.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": "Verification token is required."}), 400
+
+    user = get_user_by_verify_token(token)
+    if not user:
+        return jsonify({
+            "error": "Verification link is invalid.",
+            "code":  "INVALID_TOKEN",
+        }), 400
+
+    if _token_is_expired(user):
+        return jsonify({
+            "error": "Verification link has expired. Please request a new one.",
+            "code":  "TOKEN_EXPIRED",
+            "email": user["email"],
+        }), 400
+
+    mark_email_verified(user["id"])
+    return jsonify({"success": True, "message": "Email verified successfully."}), 200
+
+
+# ── POST /api/v1/auth/resend-verification ─────────────────────────────────────
+
+@auth_bp.post("/resend-verification")
+def resend_verification():
+    body: dict = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    user = get_user_by_email(email)
+    # Always return 200 to avoid email enumeration — don't reveal whether
+    # the account exists.
+    if not user or user.get("email_verified"):
+        return jsonify({"message": "If that address is registered and unverified, a new link has been sent."}), 200
+
+    new_token = refresh_verify_token(user["id"])
+    send_verification_email(email, user.get("full_name", ""), new_token)
+
+    return jsonify({"message": "Verification email resent. Please check your inbox."}), 200

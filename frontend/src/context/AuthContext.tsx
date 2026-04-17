@@ -35,8 +35,22 @@ interface AuthContextValue {
   effectiveTier: UserTier;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   loginAsGuest: () => void;
   logout: () => void;
+}
+
+// ─── AuthApiError ─────────────────────────────────────────
+// Carries the optional `code` field that the backend sends for specific
+// error conditions (e.g. "EMAIL_NOT_VERIFIED").
+
+export class AuthApiError extends Error {
+  code: string | undefined;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "AuthApiError";
+    this.code = code;
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -54,17 +68,20 @@ function apiUserToAuthUser(u: Record<string, string>): AuthUser {
   };
 }
 
-async function authPost(path: string, body: object): Promise<{ token: string; user: Record<string, string> }> {
+async function authPost(path: string, body: object): Promise<Record<string, unknown>> {
   const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body:    JSON.stringify(body),
   });
-  const data = await res.json() as { token?: string; user?: Record<string, string>; error?: string };
+  const data = await res.json() as Record<string, unknown>;
   if (!res.ok) {
-    throw new Error(data.error ?? `Request failed (${res.status})`);
+    throw new AuthApiError(
+      (data.error as string) ?? `Request failed (${res.status})`,
+      data.code as string | undefined,
+    );
   }
-  return data as { token: string; user: Record<string, string> };
+  return data;
 }
 
 // ─── Context ──────────────────────────────────────────────
@@ -100,14 +117,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { token: t, user: u } = await authPost("/api/v1/auth/login", { email, password });
-    _persist(t, apiUserToAuthUser(u));
+    const data = await authPost("/api/v1/auth/login", { email, password });
+    _persist(
+      data.token as string,
+      apiUserToAuthUser(data.user as Record<string, string>),
+    );
   }, [_persist]);
 
   const register = useCallback(async (payload: RegisterPayload) => {
-    const { token: t, user: u } = await authPost("/api/v1/auth/register", payload);
-    _persist(t, apiUserToAuthUser(u));
-  }, [_persist]);
+    // Backend now returns { message, email } — no token.
+    // User must verify their email before they can log in.
+    await authPost("/api/v1/auth/register", payload);
+    // Intentionally do NOT call _persist here.
+  }, []);
+
+  const resendVerification = useCallback(async (email: string) => {
+    await authPost("/api/v1/auth/resend-verification", { email });
+  }, []);
 
   const loginAsGuest = useCallback(() => {
     setToken(null);
@@ -136,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         effectiveTier,
         login,
         register,
+        resendVerification,
         loginAsGuest,
         logout,
       }}
