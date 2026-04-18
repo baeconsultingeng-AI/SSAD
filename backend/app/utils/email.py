@@ -48,7 +48,7 @@ def send_verification_email(
     payload = {
         "from":    _EMAIL_FROM,
         "to":      [to_email],
-        "subject": "Verify your SSDA account",
+        "subject": "Verify your SSAD account",
         "html":    html,
     }
     headers = {
@@ -81,7 +81,7 @@ def _build_html(first_name: str, link: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify your SSDA account</title>
+  <title>Verify your SSAD account</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Inter,Helvetica,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
@@ -95,7 +95,7 @@ def _build_html(first_name: str, link: str) -> str:
           <tr>
             <td style="background:#1d4ed8;padding:32px 40px;">
               <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;
-                         letter-spacing:-.3px;">SSDA</h1>
+                         letter-spacing:-.3px;">SSAD</h1>
               <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px;">
                 Smart Structural Analysis &amp; Design
               </p>
@@ -129,7 +129,7 @@ def _build_html(first_name: str, link: str) -> str:
 
               <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
                 This link expires in 24 hours.
-                If you didn't create an SSDA account you can safely ignore this email.
+                If you didn't create an SSAD account you can safely ignore this email.
               </p>
               <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;word-break:break-all;">
                 Or paste this URL in your browser:<br/>
@@ -143,7 +143,7 @@ def _build_html(first_name: str, link: str) -> str:
             <td style="background:#f9fafb;padding:20px 40px;
                        border-top:1px solid #e5e7eb;">
               <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
-                © 2025 SSDA · Smart Structural Analysis &amp; Design
+                © 2025 SSAD · Smart Structural Analysis &amp; Design
               </p>
             </td>
           </tr>
