@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// build: 2026-04-18c
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
