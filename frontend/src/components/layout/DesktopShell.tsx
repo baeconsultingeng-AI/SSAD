@@ -74,6 +74,13 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
   const [paymentOpen, setPaymentOpen]       = useState(false);
   const projMenuRef = useRef<HTMLDivElement>(null);
 
+  // Trial countdown
+  const trialDaysLeft = (() => {
+    if (!user || user.tier !== "trial" || !user.trialExpiresAt) return null;
+    const ms = new Date(user.trialExpiresAt).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / 86_400_000));
+  })();
+
   useEffect(() => {
     if (projMenuOpen) setProjects(loadProjects());
   }, [projMenuOpen]);
@@ -277,16 +284,30 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
               <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "rgba(200,150,12,.85)", background: "rgba(200,150,12,.15)", border: "1px solid rgba(200,150,12,.3)", borderRadius: 4, padding: "2px 6px", textTransform: "uppercase" }}>
                 {user.tier}
               </span>
+              {trialDaysLeft !== null && (
+                <span style={{
+                  fontFamily: "var(--mono)", fontSize: 9, fontWeight: 700,
+                  color: trialDaysLeft <= 5 ? "#ef4444" : trialDaysLeft <= 10 ? "#f97316" : "rgba(255,255,255,.5)",
+                  background: trialDaysLeft <= 5 ? "rgba(239,68,68,.12)" : trialDaysLeft <= 10 ? "rgba(249,115,22,.12)" : "rgba(255,255,255,.06)",
+                  border: `1px solid ${trialDaysLeft <= 5 ? "rgba(239,68,68,.35)" : trialDaysLeft <= 10 ? "rgba(249,115,22,.35)" : "rgba(255,255,255,.12)"}`,
+                  borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap",
+                }}>
+                  {trialDaysLeft === 0 ? "Expires today" : `${trialDaysLeft}d left`}
+                </span>
+              )}
             </div>
           )}
           <button
             onClick={() => setPaymentOpen(true)}
             style={{
-              background: "linear-gradient(135deg,rgba(200,150,12,.25),rgba(224,168,32,.18))",
-              border: "1px solid rgba(200,150,12,.55)",
+              background: trialDaysLeft !== null && trialDaysLeft <= 5
+                ? "linear-gradient(135deg,rgba(239,68,68,.3),rgba(239,68,68,.18))"
+                : "linear-gradient(135deg,rgba(200,150,12,.25),rgba(224,168,32,.18))",
+              border: `1px solid ${trialDaysLeft !== null && trialDaysLeft <= 5 ? "rgba(239,68,68,.6)" : "rgba(200,150,12,.55)"}`,
               borderRadius: 8, padding: "6px 14px", cursor: "pointer",
               fontFamily: "var(--mono)", fontSize: 10, fontWeight: 700,
-              color: "#e0a820", letterSpacing: ".4px",
+              color: trialDaysLeft !== null && trialDaysLeft <= 5 ? "#f87171" : "#e0a820",
+              letterSpacing: ".4px",
               display: "flex", alignItems: "center", gap: 5,
             }}
           >
