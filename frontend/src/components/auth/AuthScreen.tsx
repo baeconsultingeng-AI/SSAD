@@ -248,9 +248,9 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
 }
 
 // ─── Input helper ─────────────────────────────────────────
-function AuthInput({ id, type = "text", placeholder, label, value, onChange, required = false }: {
+function AuthInput({ id, type = "text", placeholder, label, value, onChange, required = false, autoComplete }: {
   id: string; type?: string; placeholder: string; label: string;
-  value: string; onChange: (v: string) => void; required?: boolean;
+  value: string; onChange: (v: string) => void; required?: boolean; autoComplete?: string;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -263,7 +263,7 @@ function AuthInput({ id, type = "text", placeholder, label, value, onChange, req
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder} required={required}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        autoComplete={type === "email" ? "email" : type === "password" ? "current-password" : "off"}
+        autoComplete={autoComplete ?? (type === "email" ? "email" : type === "password" ? "current-password" : "off")}
         style={{
           width: "100%", padding: "10px 12px",
           border: `1.5px solid ${focused ? "#1a4a8a" : "#ddd8cf"}`,
@@ -317,6 +317,7 @@ export default function AuthScreen() {
   const [regName, setRegName]           = useState("");
   const [regEmail, setRegEmail]         = useState("");
   const [regPassword, setRegPassword]   = useState("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [regFirm, setRegFirm]           = useState("");
   const [regRole, setRegRole]           = useState("");
   const [regCountry, setRegCountry]     = useState("");
@@ -363,6 +364,7 @@ export default function AuthScreen() {
     if (!regName.trim())  { setRegError("Please enter your full name."); return; }
     if (!regEmail.trim() || !regEmail.includes("@")) { setRegError("Please enter a valid email."); return; }
     if (regPassword.length < 8) { setRegError("Password must be at least 8 characters."); return; }
+    if (regPassword !== regConfirmPassword) { setRegError("Passwords do not match."); return; }
     if (!regRole) { setRegError("Please select your role."); return; }
     if (!regAgree) { setRegError("Please agree to the Terms of Use."); return; }
     setRegError(null);
@@ -623,7 +625,8 @@ export default function AuthScreen() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-name" label="Full Name" placeholder="Engr. Amara Osei" value={regName} onChange={setRegName} required /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-email" type="email" label="Email Address" placeholder="engineer@firm.com" value={regEmail} onChange={setRegEmail} required /></div>
-            <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-password" type="password" label="Password (min 8 chars)" placeholder="••••••••" value={regPassword} onChange={setRegPassword} required /></div>
+            <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-password" type="password" label="Password (min 8 chars)" placeholder="••••••••" value={regPassword} onChange={setRegPassword} required autoComplete="new-password" /></div>
+            <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-confirm-password" type="password" label="Confirm Password" placeholder="••••••••" value={regConfirmPassword} onChange={setRegConfirmPassword} required autoComplete="new-password" /></div>
             <div style={{ gridColumn: "1/-1" }}><AuthInput id="reg-firm" label="Firm / Organisation" placeholder="BAE Consulting Engineers" value={regFirm} onChange={setRegFirm} /></div>
           </div>
 
