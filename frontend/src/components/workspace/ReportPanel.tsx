@@ -923,7 +923,7 @@ export default function ReportPanel() {
             );
           })()}
 
-          {/* -- Detailed Calculation Steps (audit trail) -- */
+          {/* -- Detailed Calculation Steps (audit trail) -- */}
           <div style={{ borderTop: "3px solid #ede9e1" }}>
             <div style={{ padding: "14px 18px 10px", background: "#f5f3f0", borderBottom: "2px solid #e8e2d9", display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ fontFamily: "var(--mono)", fontSize: 17, fontWeight: 900, color: accent }}>APPENDIX A</span>
