@@ -339,6 +339,39 @@ export default function ReportPanel() {
   const moduleShort   = MODULE_SHORT[calcResult.module]  ?? calcResult.module;
   const utilBarColor  = util >= 100 ? "#b91c1c" : util >= 85 ? "#b45309" : "#15803d";
 
+  const techStandard = isSteel
+    ? {
+        code: "BS 5950-1:2000",
+        full: "Structural use of steelwork in building \u2014 Code of practice for design, rolled and welded sections",
+        factors: [
+          { label: "Material factor (\u03B3\u2098)", value: "1.0 (p\u02B8 table-based)" },
+          { label: "ULS load combination", value: "1.4G\u2096 + 1.6Q\u2096" },
+          { label: "SLS load combination", value: "1.0G\u2096 + 1.0Q\u2096" },
+        ],
+        clauses: [
+          "Section classification: Cl. 3.5",
+          "Bending capacity: Cl. 4.2.5",
+          "Shear capacity: Cl. 4.2.3",
+          "Deflection limits: Cl. 2.5.2 (L/360 live, L/200 total)",
+        ],
+      }
+    : {
+        code: "BS 8110-1:1997",
+        full: "Structural use of concrete \u2014 Code of practice for design and construction",
+        factors: [
+          { label: "Concrete (\u03B3\u2098 = \u03B3c)", value: "1.50" },
+          { label: "Reinforcement (\u03B3\u2098 = \u03B3s)", value: "1.15" },
+          { label: "ULS load combination", value: "1.4G\u2096 + 1.6Q\u2096" },
+          { label: "SLS load combination", value: "1.0G\u2096 + 1.0Q\u2096" },
+        ],
+        clauses: [
+          "Bending capacity: Cl. 3.4.4",
+          "Shear capacity: Cl. 3.4.5",
+          "Deflection (span/depth): Cl. 3.4.6",
+          "Crack control: Cl. 3.12.11",
+        ],
+      };
+
   const sections = Array.isArray((payload as { sections?: unknown[] }).sections)
     ? (payload as { sections: RptSection[] }).sections
     : [];
@@ -880,48 +913,31 @@ export default function ReportPanel() {
           </RptSection>
 
           {/* -- § 10  Technical Basis -- */}
-          {(() => {
-            const mod = calcResult.module ?? "";
-            const isRC     = mod.startsWith("rc_");
-            const isSteel  = mod.startsWith("steel_");
-            const standard = isRC
-              ? { code: "BS 8110-1:1997", full: "Structural use of concrete — Code of practice for design and construction", gammaC: "1.50", gammaS: "1.15", gammaM: null, loadULS: "1.4G\u2096 + 1.6Q\u2096", loadSLS: "1.0G\u2096 + 1.0Q\u2096", clauses: ["Bending capacity: Cl. 3.4.4", "Shear capacity: Cl. 3.4.5", "Deflection (span/depth): Cl. 3.4.6", "Crack control: Cl. 3.12.11"] }
-              : isSteel
-              ? { code: "BS 5950-1:2000", full: "Structural use of steelwork in building — Code of practice for design, rolled and welded sections", gammaC: null, gammaS: null, gammaM: "1.0 (p\u02B8 table-based)", loadULS: "1.4G\u2096 + 1.6Q\u2096", loadSLS: "1.0G\u2096 + 1.0Q\u2096", clauses: ["Section classification: Cl. 3.5", "Bending capacity: Cl. 4.2.5", "Shear capacity: Cl. 4.2.3", "Deflection limits: Cl. 2.5.2 (L/360 live, L/200 total)"] }
-              : null;
-            if (!standard) return null;
-            return (
-              <RptSection num={10} title="Technical Basis" accent={accent}>
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Design Standard</div>
-                  <KVRow label="Code Reference" value={standard.code} />
-                  <KVRow label="Full Title" value={standard.full} />
+          <RptSection num={10} title="Technical Basis" accent={accent}>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Design Standard</div>
+              <KVRow label="Code Reference" value={techStandard.code} />
+              <KVRow label="Full Title" value={techStandard.full} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Partial Safety Factors</div>
+              {techStandard.factors.map(f => <KVRow key={f.label} label={f.label} value={f.value} />)}
+            </div>
+            <div style={{ marginBottom: 0 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Key Clause References</div>
+              {techStandard.clauses.map((cl, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: accent, fontWeight: 700, flexShrink: 0 }}>&bull;</span>
+                  <span style={{ fontFamily: "var(--ui)", fontSize: 16, color: "var(--txt)", lineHeight: 1.5 }}>{cl}</span>
                 </div>
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Partial Safety Factors</div>
-                  {standard.gammaC && <KVRow label="Concrete (\u03B3\u2098 = \u03B3c)" value={standard.gammaC} />}
-                  {standard.gammaS && <KVRow label="Reinforcement (\u03B3\u2098 = \u03B3s)" value={standard.gammaS} />}
-                  {standard.gammaM && <KVRow label="Material factor (\u03B3\u2098)" value={standard.gammaM} />}
-                  <KVRow label="ULS load combination" value={standard.loadULS} />
-                  <KVRow label="SLS load combination" value={standard.loadSLS} />
-                </div>
-                <div style={{ marginBottom: 0 }}>
-                  <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Key Clause References</div>
-                  {standard.clauses.map((cl, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: accent, fontWeight: 700, flexShrink: 0 }}>\u2022</span>
-                      <span style={{ fontFamily: "var(--ui)", fontSize: 16, color: "var(--txt)", lineHeight: 1.5 }}>{cl}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 12, padding: "8px 12px", background: `${accent}0d`, borderLeft: `3px solid ${accent}55`, borderRadius: 3 }}>
-                  <span style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--mut)", lineHeight: 1.55 }}>
-                    Engine: SSAD-v1.0 · Python <em>handcalcs</em> · Computation date: {today}
-                  </span>
-                </div>
-              </RptSection>
-            );
-          })()}
+              ))}
+            </div>
+            <div style={{ marginTop: 12, padding: "8px 12px", background: `${accent}0d`, borderLeft: `3px solid ${accent}55`, borderRadius: 3 }}>
+              <span style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--mut)", lineHeight: 1.55 }}>
+                Engine: SSAD-v1.0 &middot; Python <em>handcalcs</em> &middot; Computation date: {today}
+              </span>
+            </div>
+          </RptSection>
 
           {/* -- Detailed Calculation Steps (audit trail) -- */}
           <div style={{ borderTop: "3px solid #ede9e1" }}>
