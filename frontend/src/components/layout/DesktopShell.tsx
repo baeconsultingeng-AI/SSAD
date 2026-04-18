@@ -297,6 +297,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
               )}
             </div>
           )}
+          {user?.tier !== "pro" && (
           <button
             onClick={() => setPaymentOpen(true)}
             style={{
@@ -316,6 +317,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
             </svg>
             Upgrade to Pro
           </button>
+          )}
           <button
             onClick={logout}
             style={{ background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.15)", borderRadius: 8, padding: "6px 12px", color: "rgba(255,255,255,.6)", fontFamily: "var(--mono)", fontSize: 11, cursor: "pointer" }}
