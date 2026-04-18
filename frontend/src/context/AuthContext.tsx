@@ -38,6 +38,7 @@ interface AuthContextValue {
   resendVerification: (email: string) => Promise<void>;
   loginAsGuest: () => void;
   logout: () => void;
+  updateUser: (apiUser: Record<string, string>) => void;
 }
 
 // ─── AuthApiError ─────────────────────────────────────────
@@ -140,6 +141,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({ id: "guest", email: "", fullName: "Guest", tier: "guest" });
   }, []);
 
+  const updateUser = useCallback((apiUser: Record<string, string>) => {
+    const updated = apiUserToAuthUser(apiUser);
+    setUser(updated);
+    localStorage.setItem("ssad_user", JSON.stringify(updated));
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("ssad_token");
     localStorage.removeItem("ssad_user");
@@ -165,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resendVerification,
         loginAsGuest,
         logout,
+        updateUser,
       }}
     >
       {children}

@@ -38,7 +38,7 @@ const PLANS = [
 ];
 
 export default function PaymentModal({ onClose }: Props) {
-  const { user, token } = useAuth();
+  const { user, token, updateUser } = useAuth();
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [pendingRef, setPendingRef] = useState<string | null>(null);
@@ -55,8 +55,10 @@ export default function PaymentModal({ onClose }: Props) {
         const res = await fetch(`${API_BASE}/api/v1/payment/verify/${pendingRef}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        const json = await res.json() as { status?: string; tier?: string; error?: string };
+        const json = await res.json() as { status?: string; tier?: string; error?: string; user?: Record<string, string> };
         if (res.ok && json.status === "success") {
+          // Persist updated tier to localStorage before reload
+          if (json.user) updateUser(json.user);
           setSuccess(true);
           setPendingRef(null);
           // Reload page so tier updates everywhere
