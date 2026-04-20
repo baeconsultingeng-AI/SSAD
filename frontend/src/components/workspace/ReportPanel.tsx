@@ -913,29 +913,31 @@ export default function ReportPanel() {
           </RptSection>
 
           {/* -- § 10  Technical Basis -- */}
-          <div style={{ background: "#fef9e7", border: "3px solid #f39c12", padding: "20px 18px", margin: "0" }}>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 18, fontWeight: 900, color: "#b7770d", marginBottom: 16 }}>10 — TECHNICAL BASIS</div>
+          <RptSection num={10} title="Technical Basis" accent={accent}>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 700, color: "#7d6608", textTransform: "uppercase", marginBottom: 8 }}>Design Standard</div>
-              <div style={{ fontFamily: "var(--ui)", fontSize: 16 }}><strong>Code:</strong> {techStandard.code}</div>
-              <div style={{ fontFamily: "var(--ui)", fontSize: 16, marginTop: 4 }}><strong>Title:</strong> {techStandard.full}</div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Design Standard</div>
+              <KVRow label="Code Reference" value={techStandard.code} />
+              <KVRow label="Full Title" value={techStandard.full} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 700, color: "#7d6608", textTransform: "uppercase", marginBottom: 8 }}>Partial Safety Factors</div>
-              {techStandard.factors.map(f => (
-                <div key={f.label} style={{ fontFamily: "var(--ui)", fontSize: 16, marginBottom: 4 }}><strong>{f.label}:</strong> {f.value}</div>
-              ))}
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Partial Safety Factors</div>
+              {techStandard.factors.map(f => <KVRow key={f.label} label={f.label} value={f.value} />)}
             </div>
-            <div>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 700, color: "#7d6608", textTransform: "uppercase", marginBottom: 8 }}>Key Clause References</div>
+            <div style={{ marginBottom: 0 }}>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: ".7px", marginBottom: 8, paddingBottom: 4, borderBottom: `1px solid ${accent}22` }}>Key Clause References</div>
               {techStandard.clauses.map((cl, i) => (
-                <div key={i} style={{ fontFamily: "var(--ui)", fontSize: 16, marginBottom: 4 }}>• {cl}</div>
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 5 }}>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: accent, fontWeight: 700, flexShrink: 0 }}>&bull;</span>
+                  <span style={{ fontFamily: "var(--ui)", fontSize: 16, color: "var(--txt)", lineHeight: 1.5 }}>{cl}</span>
+                </div>
               ))}
             </div>
-            <div style={{ marginTop: 12, fontFamily: "var(--ui)", fontSize: 14, color: "#666" }}>
-              Engine: SSAD-v1.0 · Python handcalcs · {today}
+            <div style={{ marginTop: 12, padding: "8px 12px", background: `${accent}0d`, borderLeft: `3px solid ${accent}55`, borderRadius: 3 }}>
+              <span style={{ fontFamily: "var(--ui)", fontSize: 14, color: "var(--mut)", lineHeight: 1.55 }}>
+                Engine: SSAD-v1.0 &middot; Python <em>handcalcs</em> &middot; Computation date: {today}
+              </span>
             </div>
-          </div>
+          </RptSection>
 
           {/* -- Detailed Calculation Steps (audit trail) -- */}
           <div style={{ borderTop: "3px solid #ede9e1" }}>
